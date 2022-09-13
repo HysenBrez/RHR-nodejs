@@ -1,21 +1,17 @@
 import { StatusCodes } from "http-status-codes";
+import moment from "moment";
 import nodemailer from "nodemailer";
 import cron from "node-cron";
 
 import User from "../models/User.js";
-import {
-  BadRequestError,
-  NotFoundError,
-  UnAuthenticatedError,
-} from "../errors/index.js";
+import { BadRequestError, NotFoundError } from "../errors/index.js";
 import checkPermissions from "../utils/checkPermissions.js";
 import CheckInOut from "../models/CheckInOut.js";
 import CarWash from "../models/CarWash.js";
 import CarTransfer from "../models/CarTransfer.js";
-import moment from "moment";
 
 export const createUser = async (req, res) => {
-  const { firstName, lastName, email, password, locationId } = req.body;
+  const { firstName, lastName, email, password, role, locationId } = req.body;
 
   if (!firstName || !lastName || !email || !password || !locationId) {
     throw new BadRequestError("Please provide all values");
@@ -31,7 +27,9 @@ export const createUser = async (req, res) => {
     lastName,
     email,
     password,
+    role,
     locationId,
+    active: true,
   });
   const token = user.createJWT();
 
@@ -51,17 +49,21 @@ export const getUser = async (req, res) => {
 
   const user = await User.findOne({ _id: id });
 
-  if (!user) {
-    throw new NotFoundError(`Not found user`);
-  }
+  if (!user) throw new NotFoundError("Not found user");
 
-  res.status(200).json(user);
+  res
+    .status(200)
+    .json({ ...user._doc, active: user.active ? "active" : "noActive" });
 };
 
 export const getAllUsers = async (req, res) => {
-  const { search, sort, sortBy } = req.query;
+  const { all, search, sort, sortBy } = req.query;
 
-  let queryObject = {};
+  let queryObject = {
+    active: true,
+  };
+
+  if (all) queryObject.active = { $in: [true, false] };
 
   if (search) {
     queryObject = {
@@ -93,21 +95,33 @@ export const getAllUsers = async (req, res) => {
 };
 
 export const updateUser = async (req, res) => {
-  const { firstName, lastName, email, phone, locationId, description } =
-    req.body;
+  const {
+    firstName,
+    lastName,
+    email,
+    phone,
+    description,
+    role,
+    locationId,
+    active,
+  } = req.body;
 
-  if (!firstName || !lastName || !email || !locationId) {
+  const { id } = req.params;
+
+  if (!id || !firstName || !lastName || !email || !locationId) {
     throw new BadRequestError("Please provide all values");
   }
 
-  const user = await User.findOne({ _id: req.params.id });
+  const user = await User.findOne({ _id: id });
 
   user.firstName = firstName;
   user.lastName = lastName;
   user.email = email;
   user.phone = phone;
-  user.locationId = locationId;
   user.description = description;
+  user.role = role;
+  user.locationId = locationId;
+  user.active = active == "noActive" ? false : true;
 
   await user.save();
 
@@ -120,22 +134,22 @@ export const changePassword = async (req, res) => {
   const { currentPassword, newPassword, confirmPassword } = req.body;
   const { id: userId } = req.params;
 
-  if (!userId || !currentPassword || !newPassword || !confirmPassword) {
+  if (!userId || !newPassword || !confirmPassword)
     throw new BadRequestError("Please provide all values");
-  }
 
-  if (newPassword !== confirmPassword) {
+  if (newPassword !== confirmPassword)
     throw new BadRequestError(
       "New password and confirm password must be the same."
     );
-  }
 
   const user = await User.findOne({ _id: userId }).select("+password");
 
-  const isPasswordCorrect = await user.comparePassword(currentPassword);
-  if (!isPasswordCorrect) {
-    throw new UnAuthenticatedError("Invalid Credentials");
+  if (req.user.role !== "admin") {
+    const isPasswordCorrect = await user.comparePassword(currentPassword);
+    if (!isPasswordCorrect)
+      throw new BadRequestError("Current password is incorrect");
   }
+
   user.password = newPassword;
 
   await user.save();
@@ -146,14 +160,12 @@ export const changePassword = async (req, res) => {
 };
 
 export const deleteUser = async (req, res) => {
+  checkPermissions(req.user);
+
   const { id } = req.params;
 
   const user = await User.findOne({ _id: id });
-  if (!user) {
-    throw new NotFoundError(`Not found user`);
-  }
-
-  checkPermissions(req.user);
+  if (!user) throw new NotFoundError("Not found user");
 
   await user.remove();
 

@@ -33,25 +33,28 @@ const UserSchema = new mongoose.Schema({
     minlength: 6,
     select: false,
   },
-  role: {
-    type: String,
-    trim: true,
-    maxlength: 20,
-  },
   phone: {
     type: String,
     trim: true,
     maxlength: 20,
     default: "",
   },
+  description: {
+    type: String,
+    maxlength: 1000,
+    default: "...",
+  },
+  role: {
+    type: String,
+    trim: true,
+    maxlength: 20,
+  },
   locationId: {
     type: mongoose.Types.ObjectId,
     ref: "Location",
   },
-  description: {
-    type: String,
-    maxlength: 2000,
-    default: "...",
+  active: {
+    type: Boolean,
   },
 });
 
@@ -64,14 +67,9 @@ UserSchema.pre("save", async function () {
 
 UserSchema.methods.createJWT = function () {
   return jwt.sign(
-    {
-      userId: this._id,
-      role: this.role,
-    },
+    { userId: this._id, role: this.role },
     process.env.JWT_SECRET,
-    {
-      expiresIn: process.env.JWT_LIFETIME,
-    }
+    { expiresIn: process.env.JWT_LIFETIME }
   );
 };
 

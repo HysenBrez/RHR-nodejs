@@ -1,5 +1,16 @@
 import mongoose from "mongoose";
-import validator from "validator";
+
+const BreakSchema = new mongoose.Schema({
+  startBreak: {
+    type: Date,
+  },
+  endBreak: {
+    type: Date,
+  },
+  active: {
+    type: Boolean,
+  },
+});
 
 const CheckInOut = new mongoose.Schema(
   {
@@ -17,12 +28,17 @@ const CheckInOut = new mongoose.Schema(
     },
     endTime: {
       type: Date,
+      default: function () {
+        return new Date(
+          new Date(this.startTime).getTime() + 60 * 60 * 24 * 1000 - 60000
+        );
+      },
     },
     endTimeLocation: {
       type: Object,
     },
     breaks: {
-      type: Array,
+      type: [BreakSchema],
     },
     active: {
       type: Boolean,
@@ -43,6 +59,9 @@ const CheckInOut = new mongoose.Schema(
     dailySalary: {
       type: Number,
     },
+    suspect: {
+      type: Boolean,
+    },
     createdBy: {
       type: mongoose.Types.ObjectId,
       ref: "User",
@@ -53,5 +72,11 @@ const CheckInOut = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+CheckInOut.pre("save", async function () {
+  if (!this.isModified("endTime")) return;
+
+  this.suspect = false;
+});
 
 export default mongoose.model("ChekInOut", CheckInOut);
