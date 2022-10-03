@@ -54,7 +54,7 @@ const Location = new mongoose.Schema(
     locationType: {
       type: String,
       enum: ["noTransfer", "withTransfer"],
-      required: [true, "Please provie location type"],
+      required: [true, "Please provide location type"],
     },
     carType: {
       type: [CarTypeSchema],
@@ -64,6 +64,9 @@ const Location = new mongoose.Schema(
     createdBy: {
       type: mongoose.Types.ObjectId,
       ref: "User",
+    },
+    deletedAt: {
+      type: Date,
     },
   },
   {

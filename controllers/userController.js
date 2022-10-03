@@ -5,22 +5,20 @@ import cron from "node-cron";
 
 import User from "../models/User.js";
 import { BadRequestError, NotFoundError } from "../errors/index.js";
-import checkPermissions from "../utils/checkPermissions.js";
+import { adminPermissions } from "../utils/checkPermissions.js";
 import CheckInOut from "../models/CheckInOut.js";
 import CarWash from "../models/CarWash.js";
 import CarTransfer from "../models/CarTransfer.js";
+import { addDays } from "../utils/helpers.js";
 
 export const createUser = async (req, res) => {
   const { firstName, lastName, email, password, role, locationId } = req.body;
 
-  if (!firstName || !lastName || !email || !password || !locationId) {
+  if (!firstName || !lastName || !email || !password || !locationId)
     throw new BadRequestError("Please provide all values");
-  }
 
   const checkEmail = await User.findOne({ email });
-  if (checkEmail) {
-    throw new BadRequestError("Email already in use");
-  }
+  if (checkEmail) throw new BadRequestError("Email already in use");
 
   const user = await User.create({
     firstName,
@@ -53,17 +51,18 @@ export const getUser = async (req, res) => {
 
   res
     .status(200)
-    .json({ ...user._doc, active: user.active ? "active" : "noActive" });
+    .json({ ...user._doc, active: user.active ? "active" : "Inactive" });
 };
 
 export const getAllUsers = async (req, res) => {
-  const { all, search, sort, sortBy } = req.query;
+  const { active, search, sort, sortBy } = req.query;
 
   let queryObject = {
     active: true,
+    deletedAt: "",
   };
 
-  if (all) queryObject.active = { $in: [true, false] };
+  // if (all) queryObject.active = { $in: [true, false] };
 
   if (search) {
     queryObject = {
@@ -74,6 +73,8 @@ export const getAllUsers = async (req, res) => {
       ],
     };
   }
+
+  if (active == "false") queryObject.active = false;
 
   let result = User.find(queryObject)
     .collation({ locale: "en" })
@@ -104,13 +105,16 @@ export const updateUser = async (req, res) => {
     role,
     locationId,
     active,
+    street,
+    postalCode,
+    place,
+    hourlyPay,
   } = req.body;
 
   const { id } = req.params;
 
-  if (!id || !firstName || !lastName || !email || !locationId) {
+  if (!id || !firstName || !lastName || !email || !locationId)
     throw new BadRequestError("Please provide all values");
-  }
 
   const user = await User.findOne({ _id: id });
 
@@ -118,16 +122,22 @@ export const updateUser = async (req, res) => {
   user.lastName = lastName;
   user.email = email;
   user.phone = phone;
+  user.street = street;
+  user.postalCode = postalCode;
+  user.place = place;
   user.description = description;
   user.role = role;
+  user.hourlyPay = hourlyPay;
   user.locationId = locationId;
-  user.active = active == "noActive" ? false : true;
+  user.active = active == "Inactive" ? false : true;
 
   await user.save();
 
   const token = user.createJWT();
 
-  res.status(StatusCodes.OK).json({ user, token });
+  res
+    .status(StatusCodes.OK)
+    .json({ user, token, msg: "User has been updated." });
 };
 
 export const changePassword = async (req, res) => {
@@ -160,60 +170,71 @@ export const changePassword = async (req, res) => {
 };
 
 export const deleteUser = async (req, res) => {
-  checkPermissions(req.user);
+  adminPermissions(req.user);
 
   const { id } = req.params;
 
-  const user = await User.findOne({ _id: id });
-  if (!user) throw new NotFoundError("Not found user");
+  if (!id) throw new BadRequestError("Please provide all values");
 
-  await user.remove();
+  const user = await User.findOne({ _id: id, deletedAt: "" });
+
+  if (!user) throw new NotFoundError("Not found user.");
+
+  user.deletedAt = new Date().toISOString();
+
+  await user.save();
 
   res.status(StatusCodes.OK).json({ msg: "Success! User Removed." });
 };
 
 export const sendEmail = async (req, res) => {
-  const totalUsers = await User.countDocuments();
-  const totalCheckIns = await CheckInOut.countDocuments();
+  const { name, email, pdfBase64 } = req.body;
+
+  const content = Buffer.from(pdfBase64, "base64");
 
   let mailOptions = {
-    from: "labinot@euro-pixel.com",
-    to: "support@euro-pixel.com",
-    subject: "Email from NodeJS",
-    text: "Some content to send",
+    from: process.env.EMAIL_USER,
+    to: email,
+    subject: `Lohnabrechnung - ${name}`,
     html: `<!doctype html>
     <html>
       <head>
       </head>
       <body>
-        <p style="color: red">Users: ${totalUsers}</p>
-        <p style="color: green">CheckIns: ${totalCheckIns}</p>
+        Pershendetje <b>${name}, </b> <br>
+        Te bashkangjitur gjeni Lohnabrechnung.
       </body>
     </html>`,
+    attachments: [{ filename: `Lohnabrechnung - ${name}.pdf`, content }],
   };
 
   let transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
-      user: "labinot@euro-pixel.com",
-      pass: "labieuro",
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS,
     },
   });
 
-  cron.schedule("*/10 * * * * *", () => {
-    // Send e-mail
-    transporter.sendMail(mailOptions, function (error, info) {
-      if (error) {
-        console.log(error);
-      } else {
-        console.log("Email sent: " + info.response);
-      }
-    });
+  transporter.sendMail(mailOptions, function (error, info) {
+    if (error) console.log(error);
+    res.status(StatusCodes.OK).json({ msg: `Email sent: ${info.response}` });
   });
+
+  // cron.schedule("*/10 * * * * *", () => {
+  //   // Send e-mail
+  //   transporter.sendMail(mailOptions, function (error, info) {
+  //     if (error) {
+  //       console.log(error);
+  //     } else {
+  //       console.log("Email sent: " + info.response);
+  //     }
+  //   });
+  // });
 };
 
 export const getExcelFile = async (req, res) => {
-  checkPermissions(req.user);
+  adminPermissions(req.user);
 
   const { search, type, from, to, locationId, userId } = req.query;
 
@@ -233,13 +254,13 @@ export const getExcelFile = async (req, res) => {
 
   if (to)
     queryObject.createdAt = {
-      $lte: new Date(to),
+      $lte: addDays(to),
     };
 
   if (from && to)
     queryObject.createdAt = {
       $gte: new Date(from),
-      $lt: new Date(to),
+      $lt: addDays(to),
     };
 
   if (locationId) queryObject.locationId = locationId;

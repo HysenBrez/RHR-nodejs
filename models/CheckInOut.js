@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import moment from "moment";
 
 const BreakSchema = new mongoose.Schema({
   startBreak: {
@@ -29,9 +30,8 @@ const CheckInOut = new mongoose.Schema(
     endTime: {
       type: Date,
       default: function () {
-        return new Date(
-          new Date(this.startTime).getTime() + 60 * 60 * 24 * 1000 - 60000
-        );
+        const date = moment(this.startTime).set({ h: 23, m: 59, s: "00" });
+        return date;
       },
     },
     endTimeLocation: {
@@ -49,15 +49,15 @@ const CheckInOut = new mongoose.Schema(
     description: {
       type: String,
     },
-    hours: {
-      type: String,
+    workHoursInMins: {
+      type: Number,
+    },
+    dailySalary: {
+      type: Number,
     },
     paid: {
       type: Boolean,
       default: false,
-    },
-    dailySalary: {
-      type: Number,
     },
     suspect: {
       type: Boolean,

@@ -4,7 +4,8 @@ import moment from "moment";
 import CarTransfer from "../models/CarTransfer.js";
 import Location from "../models/Location.js";
 import { BadRequestError, NotFoundError } from "../errors/index.js";
-import checkPermissions from "../utils/checkPermissions.js";
+import { adminAndManagerPermissions } from "../utils/checkPermissions.js";
+import { addDays } from "../utils/helpers.js";
 
 export const carTransfer = async (req, res) => {
   const {
@@ -13,13 +14,32 @@ export const carTransfer = async (req, res) => {
     locationId,
     carType,
     transferType,
+    transferMethod,
     transferDistance,
     finalPrice,
+    acceptSuspect,
   } = req.body;
 
-  if (!userId || !licensePlate || !locationId || !carType || !transferType) {
+  if (
+    !userId ||
+    !licensePlate ||
+    !locationId ||
+    !carType ||
+    !transferType ||
+    !transferMethod
+  )
     throw new BadRequestError("Please provide all values");
-  }
+
+  const time = moment.duration("06:00:00");
+  const date = moment().subtract(time);
+
+  const carTransferCheck = await CarTransfer.findOne({
+    licensePlate,
+    createdAt: { $gte: date.toISOString(), $lt: new Date() },
+  });
+
+  if (carTransferCheck)
+    if (!acceptSuspect) return res.status(200).json({ suspected: true });
 
   let price;
 
@@ -40,43 +60,32 @@ export const carTransfer = async (req, res) => {
     price = locationPrice.carType[0].transfer[transferType];
   }
 
-  const time = moment.duration("06:00:00");
-  const date = moment().subtract(time);
-
-  const carTransferCheck = await CarTransfer.findOne({
-    licensePlate,
-    createdAt: { $gte: date.toISOString(), $lt: new Date() },
-  });
-
   const carTransfer = await CarTransfer.create({
     userId,
     licensePlate,
     locationId,
     carType,
     transferType,
+    transferMethod,
     transferDistance,
     finalPrice: price,
     suspect: carTransferCheck ? true : false,
     createdBy: req.user.userId,
   });
 
-  res.status(201).json(carTransfer);
+  res.status(201).json({ carTransfer, msg: "Car Transfered successfully." });
 };
 
 export const getCarsTransferByUser = async (req, res) => {
   const { id: userId } = req.params;
 
-  if (!userId) {
-    throw new BadRequestError("Please provide all values");
-  }
+  if (!userId) throw new BadRequestError("Please provide all values");
 
   const { search, from, to } = req.query;
 
   const queryObject = { userId };
 
-  if (search) {
-    queryObject.licensePlate = { $regex: search, $options: "i" };
-  }
+  if (search) queryObject.licensePlate = { $regex: search, $options: "i" };
 
   if (from)
     queryObject.createdAt = {
@@ -84,19 +93,18 @@ export const getCarsTransferByUser = async (req, res) => {
     };
   if (to)
     queryObject.createdAt = {
-      $lte: new Date(to), // should be +1 day
+      $lte: addDays(to),
     };
   if (from && to)
     queryObject.createdAt = {
       $gte: new Date(from),
-      $lt: new Date(to),
+      $lt: addDays(to),
     };
 
-  let result = CarTransfer.find(queryObject).populate("locationId", [
-    "_id",
-    "locationName",
-    "locationType",
-  ]);
+  let result = CarTransfer.find(queryObject, "-__v -finalPrice").populate(
+    "locationId",
+    ["_id", "locationName", "locationType"]
+  );
 
   result = result.sort({ createdAt: -1 });
 
@@ -108,9 +116,7 @@ export const getCarsTransferByUser = async (req, res) => {
 
   const carsTransfer = await result;
 
-  if (!carsTransfer) {
-    throw new NotFoundError("Not found cars wash");
-  }
+  if (!carsTransfer) throw new NotFoundError("Not found cars transfer");
 
   const totalCarsTransfer = await CarTransfer.countDocuments(queryObject);
   const numOfPages = Math.ceil(totalCarsTransfer / limit);
@@ -121,7 +127,7 @@ export const getCarsTransferByUser = async (req, res) => {
 };
 
 export const getCarsTransferByLocation = async (req, res) => {
-  checkPermissions(req.user);
+  adminAndManagerPermissions(req.user);
   const { id: locationId } = req.params;
 
   if (!locationId) {
@@ -144,12 +150,12 @@ export const getCarsTransferByLocation = async (req, res) => {
     };
   if (to)
     queryObject.createdAt = {
-      $lte: new Date(to), // should be +1 day
+      $lte: addDays(to),
     };
   if (from && to)
     queryObject.createdAt = {
       $gte: new Date(from),
-      $lt: new Date(to),
+      $lt: addDays(to),
     };
 
   let result = CarTransfer.find(queryObject)
@@ -166,9 +172,7 @@ export const getCarsTransferByLocation = async (req, res) => {
 
   const carsTransferLocation = await result;
 
-  if (!carsTransferLocation) {
-    throw new NotFoundError("Not found cars wash");
-  }
+  if (!carsTransferLocation) throw new NotFoundError("Not found cars wash");
 
   const totalCarsTransferLocation = await CarTransfer.countDocuments(
     queryObject
@@ -185,9 +189,7 @@ export const getCarTransfer = async (req, res) => {
 
   const carTransfer = await CarTransfer.findOne({ _id: id });
 
-  if (!carTransfer) {
-    throw new NotFoundError("Not found car transfer");
-  }
+  if (!carTransfer) throw new NotFoundError("Not found car transfer");
 
   res.status(200).json(carTransfer);
 };
@@ -198,36 +200,69 @@ export const updateCarTransfer = async (req, res) => {
     locationId,
     carType,
     transferType,
+    transferMethod,
     transferDistance,
-    finalPrice,
+    acceptSuspect,
   } = req.body;
 
-  if (!licensePlate || !locationId || !carType || !transferType) {
+  if (
+    !licensePlate ||
+    !locationId ||
+    !carType ||
+    !transferType ||
+    !transferMethod
+  )
     throw new BadRequestError("Please provide all values");
+
+  const carTransfer = await CarTransfer.findOne({ _id: req.params.id });
+
+  if (!carTransfer) throw new BadRequestError("Not found Car Transfer.");
+
+  const time = moment.duration("06:00:00");
+
+  const carTransferCheck = await CarTransfer.findOne({
+    licensePlate,
+    createdAt: {
+      $gte: moment(carTransfer.createdAt).subtract(time).format(),
+      $lt: moment(carTransfer.createdAt).add(time).format(),
+    },
+  });
+
+  if (carTransferCheck)
+    if (!acceptSuspect) return res.status(200).json({ suspected: true });
+
+  let price;
+
+  if (transferType === "special") {
+    price = specialPrice;
+  } else {
+    const locationPrice = await Location.findOne(
+      { _id: locationId, "carType.name": carType },
+      { "carType.transfer.$": 1 }
+    );
+    price = locationPrice.carType[0].transfer[transferType];
   }
 
-  const carTransfer = await CarTransfer.findOneAndUpdate(
-    { _id: req.params.id },
-    {
-      licensePlate,
-      locationId,
-      carType,
-      transferType,
-      transferDistance,
-      finalPrice,
-    },
-    { new: true }
-  );
+  carTransfer.licensePlate = licensePlate;
+  carTransfer.locationId = locationId;
+  carTransfer.carType = carType;
+  carTransfer.transferType = transferType;
+  carTransfer.transferMethod = transferMethod;
+  carTransfer.transferDistance = transferDistance;
+  carTransfer.finalPrice = price;
+  carTransfer.suspect = carTransferCheck ? true : false;
 
-  res.status(200).json(carTransfer);
+  await carTransfer.save();
+
+  res
+    .status(200)
+    .json({ carTransfer, msg: "Car transfer successfully updated." });
 };
 
 export const updateCarTransferSuspect = async (req, res) => {
   const { carTransferId } = req.params;
 
-  if (!carTransferId) {
-    throw new BadRequestError("Please provide all values");
-  }
+  if (!carTransferId) throw new BadRequestError("Please provide all values");
 
   const carTransfer = await CarTransfer.findOneAndUpdate(
     { _id: carTransferId },
@@ -235,21 +270,21 @@ export const updateCarTransferSuspect = async (req, res) => {
     { new: true }
   );
 
-  if (carTransfer === null) throw new NotFoundError("Not found car transfer.");
+  if (!carTransfer) throw new NotFoundError("Not found car transfer.");
 
-  res.status(200).json(carTransfer);
+  res
+    .status(200)
+    .json({ carTransfer, msg: "Car transfer successfully updated." });
 };
 
 export const deleteCarTransfer = async (req, res) => {
-  checkPermissions(req.user);
+  adminAndManagerPermissions(req.user);
 
   const { id } = req.params;
 
   const carTransfer = CarTransfer.find({ _id: id });
 
-  if (!carTransfer) {
-    throw new NotFoundError("Not found car wash!");
-  }
+  if (!carTransfer) throw new NotFoundError("Not found car wash!");
 
   await CarTransfer.deleteOne({ _id: id });
 

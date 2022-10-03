@@ -21,6 +21,14 @@ const CarTransfer = new mongoose.Schema(
       type: String,
       required: [true, "Please provide car type"],
     },
+    transferMethod: {
+      type: String,
+      enum: {
+        values: ["collection", "delivery"],
+        message: "The transfer method is not valid.",
+      },
+      required: [true, "Please provide transfer method"],
+    },
     transferType: {
       type: String,
       required: [true, "Please provide transfer type"],

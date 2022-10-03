@@ -4,13 +4,16 @@ import mongoose from "mongoose";
 import { StatusCodes } from "http-status-codes";
 
 import { BadRequestError, NotFoundError } from "../errors/index.js";
-import checkPermissions from "../utils/checkPermissions.js";
+import { adminPermissions } from "../utils/checkPermissions.js";
 import {
-  timeDiff,
   calcDailySalary,
   format24h,
   diffInMins,
   toHoursAndMins,
+  checkSuspect,
+  addDays,
+  equalDays,
+  addMonths,
 } from "../utils/helpers.js";
 import User from "../models/User.js";
 
@@ -104,6 +107,7 @@ export const checkIn = async (req, res) => {
     startTimeLocation,
     suspect: true,
     createdBy: req.user.userId,
+    workHoursInMins: 0,
   });
 
   res.status(201).json(checkIn);
@@ -162,18 +166,14 @@ export const checkOut = async (req, res) => {
 
   let minutes = diffInMins(endTime, checkIn.startTime);
 
-  checkIn.breaks.map((b) => {
-    minutes -= diffInMins(b.endBreak, b.startBreak);
-  });
-
-  const time = toHoursAndMins(minutes);
+  checkIn.breaks.map((b) => (minutes -= diffInMins(b.endBreak, b.startBreak)));
 
   checkIn.endTime = endTime;
   checkIn.endTimeLocation = endTimeLocation;
   checkIn.active = false;
-  checkIn.hours = `${time.hours}h ${time.mins}min`;
-  checkIn.dailySalary = calcDailySalary(time.hours, time.mins, 10);
-  checkIn.suspect = time.hours >= 23 ? true : false;
+  checkIn.workHoursInMins = minutes;
+  checkIn.dailySalary = calcDailySalary(minutes, req.user.hourlyPay || 0);
+  checkIn.suspect = checkSuspect(endTime);
 
   await checkIn.save();
 
@@ -185,11 +185,15 @@ export const getCheckInsByUser = async (req, res) => {
 
   const { from, to } = req.query;
 
-  const queryObject = {};
+  const date20 = moment().set({ D: 20 }).format("YYYY-MM-DD");
 
-  if (!userId) {
-    throw new BadRequestError("Please provide all values");
-  }
+  // Add more ...
+
+  const queryObject = {
+    startTime: { $gte: date20, $lte: addMonths(date20) }, // 20-19
+  };
+
+  if (!userId) throw new BadRequestError("Please provide all values");
 
   if (userId) queryObject.userId = userId;
 
@@ -199,17 +203,31 @@ export const getCheckInsByUser = async (req, res) => {
     };
   if (to)
     queryObject.startTime = {
-      $lte: new Date(to), // should be +1 day
+      $lte: addDays(to),
     };
   if (from && to)
     queryObject.startTime = {
       $gte: new Date(from),
-      $lt: new Date(to),
+      $lte: addDays(to),
     };
 
   let result = CheckInOut.find(queryObject);
 
-  result = result.sort({ createdAt: -1 });
+  result = result.sort({ startTime: -1 });
+
+  let allCheckIns = await result;
+
+  let totalMins = 0;
+  let totalSalary = 0;
+
+  allCheckIns.forEach((item) => {
+    const { workHoursInMins, dailySalary } = item;
+
+    if (workHoursInMins) {
+      totalMins += workHoursInMins;
+      totalSalary += dailySalary;
+    }
+  });
 
   const page = Number(req.query.page) || 1;
   const limit = 10;
@@ -217,16 +235,34 @@ export const getCheckInsByUser = async (req, res) => {
 
   result = result.skip(skip).limit(limit);
 
-  const checkIns = await result;
+  let checkIns = await result.clone();
 
-  if (!checkIns) {
-    throw new NotFoundError("Not found checkIns");
-  }
+  if (!checkIns) throw new NotFoundError("Not found check-ins");
 
-  const totalCheckIns = await CheckInOut.countDocuments(queryObject);
-  const numOfPages = Math.ceil(totalCheckIns / limit);
+  checkIns = checkIns.map((item) => {
+    const { _id, userId, startTime, endTime, workHoursInMins, suspect } = item;
 
-  res.status(StatusCodes.OK).json({ checkIns, totalCheckIns, numOfPages });
+    return {
+      _id,
+      userId,
+      date: moment(startTime).format("DD MMMM, YYYY"),
+      startTime: format24h(startTime),
+      endTime: !checkSuspect(endTime) ? format24h(endTime) : "-",
+      workHours: toHoursAndMins(workHoursInMins, true),
+      suspect: equalDays(startTime) ? false : suspect,
+    };
+  });
+
+  const totalCheckIns = allCheckIns.length;
+  const numOfPages = Math.ceil(allCheckIns / limit);
+
+  res.status(StatusCodes.OK).json({
+    checkIns,
+    totalCheckIns,
+    totalHours: toHoursAndMins(totalMins, true),
+    totalSalary: totalSalary.toFixed(2),
+    numOfPages,
+  });
 };
 
 export const checkInDescription = async (req, res) => {
@@ -269,11 +305,19 @@ export const getCheckIn = async (req, res) => {
       : false
     : false;
 
-  res.status(200).json({ ...checkIn._doc, activeBreak });
+  res.status(200).json({
+    ...checkIn._doc,
+    endTime:
+      equalDays(checkIn.startTime) && checkSuspect(checkIn.endTime)
+        ? null
+        : checkIn.endTime,
+    activeBreak,
+    workHours: toHoursAndMins(checkIn.workHoursInMins, true),
+  });
 };
 
 export const checkInByAdmin = async (req, res) => {
-  checkPermissions(req.user);
+  adminPermissions(req.user);
 
   const { userId, startTime, endTime, description } = req.body;
 
@@ -304,7 +348,7 @@ export const checkInByAdmin = async (req, res) => {
       "You can't create check-in twice for the same day."
     );
 
-  const diff = timeDiff(endTime, startTime);
+  const minutes = diffInMins(endTime, startTime);
 
   const checkIn = await CheckInOut.create({
     userId,
@@ -312,9 +356,9 @@ export const checkInByAdmin = async (req, res) => {
     endTime,
     active: false,
     attempt: 1,
-    hours: `${diff.hours}h ${diff.minutes}min`,
-    dailySalary: calcDailySalary(diff.hours, diff.minutes, 10),
-    suspect: diff.hours >= 23 ? true : false,
+    workHoursInMins: minutes,
+    dailySalary: calcDailySalary(minutes, req.user.hourlyPay || 0),
+    suspect: checkSuspect(endTime),
     description,
     createdBy: req.user.userId,
   });
@@ -323,13 +367,17 @@ export const checkInByAdmin = async (req, res) => {
 };
 
 export const getAllCheckIns = async (req, res) => {
-  checkPermissions(req.user);
+  adminPermissions(req.user);
 
   const { userId, locationId, from, to } = req.query;
 
-  const queryObject = {};
+  const today = moment({ h: 0, m: 0, s: 0 }).format();
 
-  if (userId) queryObject.userId = userId;
+  let queryObject = {
+    startTime: { $gte: new Date(today), $lte: new Date(addDays(today)) },
+  };
+
+  if (userId) queryObject.userId = mongoose.Types.ObjectId(userId);
 
   if (locationId) {
     const usersIds = await User.distinct("_id", { locationId });
@@ -343,43 +391,103 @@ export const getAllCheckIns = async (req, res) => {
 
   if (to)
     queryObject.startTime = {
-      $lte: new Date(to), // should be +1 day
+      $lte: new Date(addDays(to)),
     };
 
   if (from && to)
     queryObject.startTime = {
       $gte: new Date(from),
-      $lt: new Date(to),
+      $lte: new Date(addDays(to)),
     };
-
-  let result = CheckInOut.find(queryObject).populate("userId", [
-    "_id",
-    "firstName",
-    "lastName",
-  ]);
-
-  result = result.sort({ startTime: -1 });
 
   const page = Number(req.query.page) || 1;
   const limit = 10;
   const skip = (page - 1) * limit;
 
-  result = result.skip(skip).limit(limit);
+  const allCheckIns = await CheckInOut.aggregate([
+    {
+      $match: { ...queryObject },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "userId",
+        foreignField: "_id",
+        as: "userId",
+      },
+    },
+    {
+      $facet: {
+        metadata: [
+          {
+            $group: {
+              _id: null,
+              totalCheckIns: { $sum: 1 },
+              totalMins: { $sum: "$workHoursInMins" },
+              totalSalary: { $sum: "$dailySalary" },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              totalCheckIns: 1,
+              totalMins: 1,
+              totalSalary: 1,
+            },
+          },
+        ],
+        data: [
+          { $sort: { startTime: -1 } },
+          { $skip: skip },
+          { $limit: limit },
+        ],
+      },
+    },
+  ]);
 
-  const checkIns = await result;
+  const { totalCheckIns, totalMins, totalSalary } =
+    allCheckIns[0].metadata[0] || 0;
 
-  if (!checkIns) {
-    throw new NotFoundError("Not found check-ins");
-  }
+  if (!allCheckIns.length) throw new NotFoundError("Not found check-ins");
 
-  const totalCheckIns = await CheckInOut.countDocuments(queryObject);
+  const checkIns = allCheckIns[0].data.map((item) => {
+    const {
+      _id,
+      userId,
+      startTime,
+      endTime,
+      workHoursInMins,
+      dailySalary,
+      suspect,
+    } = item;
+
+    const { firstName, lastName } = userId[0];
+
+    return {
+      _id,
+      user: `${firstName} ${lastName}`,
+      date: moment(startTime).format("DD MMMM, YYYY"),
+      startTime: format24h(startTime),
+      endTime: !checkSuspect(endTime) ? format24h(endTime) : "-",
+      workHours: toHoursAndMins(workHoursInMins, true),
+      dailySalary,
+      suspect: equalDays(startTime) ? false : suspect,
+    };
+  });
+
   const numOfPages = Math.ceil(totalCheckIns / limit);
 
-  res.status(StatusCodes.OK).json({ checkIns, totalCheckIns, numOfPages });
+  res.status(StatusCodes.OK).json({
+    checkIns,
+    totalHours: totalMins ? toHoursAndMins(totalMins, true) : 0,
+    totalSalary: totalSalary || 0,
+    totalCheckIns: totalCheckIns ? totalCheckIns : 0,
+    numOfPages: numOfPages ? numOfPages : 0,
+  });
 };
 
 export const updateCheckInAdmin = async (req, res) => {
-  checkPermissions(req.user);
+  adminPermissions(req.user);
 
   const { startTime, endTime, breaks, description } = req.body;
 
@@ -392,20 +500,16 @@ export const updateCheckInAdmin = async (req, res) => {
 
   let minutes = diffInMins(endTime, checkIn.startTime);
 
-  checkIn.breaks.map((b) => {
-    minutes -= diffInMins(b.endBreak, b.startBreak);
-  });
-
-  const time = toHoursAndMins(minutes);
+  breaks.map((b) => (minutes -= diffInMins(b.endBreak, b.startBreak)));
 
   checkIn.startTime = startTime;
   checkIn.endTime = endTime;
   checkIn.breaks = breaks;
   checkIn.description = description;
   checkIn.active = false;
-  checkIn.hours = `${time.hours}h ${time.mins}min`;
-  checkIn.dailySalary = calcDailySalary(time.hours, time.mins, 10);
-  checkIn.suspect = time.hours >= 23 ? true : false;
+  checkIn.workHoursInMins = minutes;
+  checkIn.dailySalary = calcDailySalary(minutes, req.user.hourlyPay || 0);
+  checkIn.suspect = checkSuspect(endTime);
 
   await checkIn.save();
 
@@ -413,15 +517,13 @@ export const updateCheckInAdmin = async (req, res) => {
 };
 
 export const deleteCheckInAdmin = async (req, res) => {
-  checkPermissions(req.user);
+  adminPermissions(req.user);
 
   const { id } = req.params;
 
   const checkIn = CheckInOut.find({ _id: id });
 
-  if (!checkIn) {
-    throw new NotFoundError("Not found check-in");
-  }
+  if (!checkIn) throw new NotFoundError("Not found check-in");
 
   await CheckInOut.deleteOne({ _id: id });
 
@@ -429,7 +531,7 @@ export const deleteCheckInAdmin = async (req, res) => {
 };
 
 export const getExcelFile = async (req, res) => {
-  checkPermissions(req.user);
+  adminPermissions(req.user);
 
   const { userId, locationId, from, to } = req.query;
 
@@ -448,13 +550,13 @@ export const getExcelFile = async (req, res) => {
 
   if (to)
     queryObject.startTime = {
-      $lte: new Date(to),
+      $lte: addDays(to),
     };
 
   if (from && to)
     queryObject.startTime = {
       $gte: new Date(from),
-      $lt: new Date(to),
+      $lt: addDays(to),
     };
 
   let result, totalData;
@@ -468,6 +570,9 @@ export const getExcelFile = async (req, res) => {
 
   let data = await result;
 
+  let totalMins = 0;
+  let totalSalary = 0;
+
   data = data.map((item) => {
     const {
       userId: { firstName, lastName },
@@ -475,10 +580,14 @@ export const getExcelFile = async (req, res) => {
       startTimeLocation: startLoc,
       endTime,
       endTimeLocation: endLoc,
-      hours,
+      workHoursInMins,
       dailySalary,
-      paid,
     } = item;
+
+    if (workHoursInMins) {
+      totalMins += workHoursInMins;
+      totalSalary += dailySalary;
+    }
 
     return {
       user: `${firstName} ${lastName}`,
@@ -493,9 +602,8 @@ export const getExcelFile = async (req, res) => {
             endLoc?.address?.city
           })`
         : format24h(endTime),
-      hours,
+      workHours: toHoursAndMins(workHoursInMins, true),
       dailySalary,
-      paid,
     };
   });
 
@@ -503,5 +611,10 @@ export const getExcelFile = async (req, res) => {
 
   if (!data) throw new NotFoundError("Not found data!");
 
-  res.status(StatusCodes.OK).json({ data, totalData });
+  res.status(StatusCodes.OK).json({
+    data,
+    totalData,
+    totalHours: toHoursAndMins(totalMins, true),
+    totalSalary: totalSalary.toFixed(2),
+  });
 };

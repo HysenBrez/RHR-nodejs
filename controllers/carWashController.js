@@ -7,32 +7,24 @@ import {
   NotFoundError,
   UnAuthenticatedError,
 } from "../errors/index.js";
-import checkPermissions from "../utils/checkPermissions.js";
+import { adminAndManagerPermissions } from "../utils/checkPermissions.js";
 import Location from "../models/Location.js";
 import moment from "moment";
+import { addDays } from "../utils/helpers.js";
 
 export const carWash = async (req, res) => {
-  const { userId, licensePlate, locationId, carType, washType, specialPrice } =
-    req.body;
+  const {
+    userId,
+    licensePlate,
+    locationId,
+    carType,
+    washType,
+    specialPrice,
+    acceptSuspect,
+  } = req.body;
 
   if (!userId || !licensePlate || !locationId || !carType || !washType) {
     throw new BadRequestError("Please provide all values");
-  }
-
-  let price;
-
-  if (washType === "special") {
-    price = specialPrice;
-  } else {
-    const locationPrice = await Location.findOne(
-      {
-        _id: locationId,
-        "carType.name": carType,
-      },
-      { "carType.wash.$": 1 }
-    );
-
-    price = locationPrice.carType[0].wash[washType];
   }
 
   const time = moment.duration("06:00:00");
@@ -42,6 +34,22 @@ export const carWash = async (req, res) => {
     licensePlate,
     createdAt: { $gte: date.toISOString(), $lt: new Date() },
   });
+
+  if (carWashCheck)
+    if (!acceptSuspect) return res.status(200).json({ suspected: true });
+
+  let price;
+
+  if (washType === "special") {
+    price = specialPrice;
+  } else {
+    const locationPrice = await Location.findOne(
+      { _id: locationId, "carType.name": carType },
+      { "carType.wash.$": 1 }
+    );
+
+    price = locationPrice.carType[0].wash[washType];
+  }
 
   const carWash = await CarWash.create({
     userId,
@@ -55,7 +63,7 @@ export const carWash = async (req, res) => {
     createdBy: req.user.userId,
   });
 
-  res.status(201).json(carWash);
+  res.status(201).json({ carWash, msg: "Car Washed successfully." });
 };
 
 export const getCarsWashByUser = async (req, res) => {
@@ -78,19 +86,18 @@ export const getCarsWashByUser = async (req, res) => {
     };
   if (to)
     queryObject.createdAt = {
-      $lte: new Date(to), // should be +1 day
+      $lte: addDays(to),
     };
   if (from && to)
     queryObject.createdAt = {
       $gte: new Date(from),
-      $lt: new Date(to),
+      $lt: addDays(to),
     };
 
-  let result = CarWash.find(queryObject).populate("locationId", [
-    "_id",
-    "locationName",
-    "locationType",
-  ]);
+  let result = CarWash.find(queryObject, "-__v -finalPrice").populate(
+    "locationId",
+    ["_id", "locationName", "locationType"]
+  );
 
   result = result.sort({ createdAt: -1 });
 
@@ -113,7 +120,7 @@ export const getCarsWashByUser = async (req, res) => {
 };
 
 export const getCarsWashByLocation = async (req, res) => {
-  checkPermissions(req.user);
+  adminAndManagerPermissions(req.user);
 
   const { id: locationId } = req.params;
 
@@ -137,12 +144,12 @@ export const getCarsWashByLocation = async (req, res) => {
     };
   if (to)
     queryObject.createdAt = {
-      $lte: new Date(to), // should be +1 day
+      $lte: addDays(to),
     };
   if (from && to)
     queryObject.createdAt = {
       $gte: new Date(from),
-      $lt: new Date(to),
+      $lt: addDays(to),
     };
 
   let result = CarWash.find(queryObject)
@@ -159,9 +166,7 @@ export const getCarsWashByLocation = async (req, res) => {
 
   const carsWashLocation = await result;
 
-  if (!carsWashLocation) {
-    throw new NotFoundError("Not found cars wash");
-  }
+  if (!carsWashLocation) throw new NotFoundError("Not found cars wash");
 
   const totalCarsWashLocation = await CarWash.countDocuments(queryObject);
   const numOfPages = Math.ceil(totalCarsWashLocation / limit);
@@ -190,35 +195,59 @@ export const updateCarWash = async (req, res) => {
     carType,
     washType,
     specialPrice,
-    finalPrice,
+    acceptSuspect,
   } = req.body;
 
-  if (!licensePlate || !locationId || !carType || !washType) {
+  if (!licensePlate || !locationId || !carType || !washType)
     throw new BadRequestError("Please provide all values");
+
+  const carWash = await CarWash.findOne({ _id: req.params.id });
+
+  if (!carWash) throw new BadRequestError("Not found Car Wash.");
+
+  const time = moment.duration("06:00:00");
+
+  const carWashCheck = await CarWash.findOne({
+    licensePlate,
+    createdAt: {
+      $gte: moment(carWash.createdAt).subtract(time).format(),
+      $lt: moment(carWash.createdAt).add(time).format(),
+    },
+  });
+
+  if (carWashCheck)
+    if (!acceptSuspect) return res.status(200).json({ suspected: true });
+
+  let price;
+
+  if (washType === "special") {
+    price = specialPrice;
+  } else {
+    const locationPrice = await Location.findOne(
+      { _id: locationId, "carType.name": carType },
+      { "carType.wash.$": 1 }
+    );
+
+    price = locationPrice.carType[0].wash[washType];
   }
 
-  const carWash = await CarWash.findOneAndUpdate(
-    { _id: req.params.id },
-    {
-      licensePlate,
-      locationId,
-      carType,
-      washType,
-      specialPrice,
-      finalPrice,
-    },
-    { new: true }
-  );
+  carWash.licensePlate = licensePlate;
+  carWash.locationId = locationId;
+  carWash.carType = carType;
+  carWash.washType = washType;
+  carWash.specialPrice = specialPrice;
+  carWash.finalPrice = price;
+  carWash.suspect = carWashCheck ? true : false;
 
-  res.status(200).json(carWash);
+  await carWash.save();
+
+  res.status(200).json({ carWash, msg: "Car wash successfully updated." });
 };
 
 export const updateCarWashSuspect = async (req, res) => {
   const { carWashId } = req.params;
 
-  if (!carWashId) {
-    throw new BadRequestError("Please provide all values");
-  }
+  if (!carWashId) throw new BadRequestError("Please provide all values");
 
   const carWash = await CarWash.findOneAndUpdate(
     { _id: carWashId },
@@ -226,13 +255,13 @@ export const updateCarWashSuspect = async (req, res) => {
     { new: true }
   );
 
-  if (carWash === null) throw new NotFoundError("Not found car wash.");
+  if (!carWash) throw new NotFoundError("Not found car wash.");
 
-  res.status(200).json(carWash);
+  res.status(200).json({ carWash, msg: "Car wash successfully updated." });
 };
 
 export const deleteCarWash = async (req, res) => {
-  checkPermissions(req.user);
+  adminAndManagerPermissions(req.user);
 
   const { id } = req.params;
 
