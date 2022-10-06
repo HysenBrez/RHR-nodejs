@@ -18,7 +18,7 @@ export const checkUsersForPayroll = async (req, res) => {
     active: true,
   });
 
-  res.status(201).json({ getIds, users });
+  res.status(StatusCodes.OK).json({ users });
 };
 
 export const createPayroll = async (req, res) => {
