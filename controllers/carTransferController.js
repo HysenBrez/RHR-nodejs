@@ -1,11 +1,12 @@
-import { StatusCodes } from "http-status-codes";
 import moment from "moment";
+import { StatusCodes } from "http-status-codes";
 
 import CarTransfer from "../models/CarTransfer.js";
 import Location from "../models/Location.js";
 import { BadRequestError, NotFoundError } from "../errors/index.js";
 import { adminAndManagerPermissions } from "../utils/checkPermissions.js";
 import { addDays } from "../utils/helpers.js";
+import mongoose from "mongoose";
 
 export const carTransfer = async (req, res) => {
   const {
@@ -16,18 +17,10 @@ export const carTransfer = async (req, res) => {
     transferType,
     transferMethod,
     transferDistance,
-    finalPrice,
     acceptSuspect,
   } = req.body;
 
-  if (
-    !userId ||
-    !licensePlate ||
-    !locationId ||
-    !carType ||
-    !transferType ||
-    !transferMethod
-  )
+  if (!userId || !licensePlate || !locationId || !carType || !transferType || !transferMethod)
     throw new BadRequestError("Please provide all values");
 
   const time = moment.duration("06:00:00");
@@ -38,8 +31,7 @@ export const carTransfer = async (req, res) => {
     createdAt: { $gte: date.toISOString(), $lt: new Date() },
   });
 
-  if (carTransferCheck)
-    if (!acceptSuspect) return res.status(200).json({ suspected: true });
+  if (carTransferCheck) if (!acceptSuspect) return res.status(200).json({ suspected: true });
 
   let price;
 
@@ -54,8 +46,7 @@ export const carTransfer = async (req, res) => {
   if (transferType === "presumptive") {
     price =
       Number(locationPrice.carType[0].transfer.base) +
-      Number(transferDistance) *
-        Number(locationPrice.carType[0].transfer.perkm);
+      Number(transferDistance) * Number(locationPrice.carType[0].transfer.perkm);
   } else {
     price = locationPrice.carType[0].transfer[transferType];
   }
@@ -73,7 +64,7 @@ export const carTransfer = async (req, res) => {
     createdBy: req.user.userId,
   });
 
-  res.status(201).json({ carTransfer, msg: "Car Transfered successfully." });
+  res.status(201).json({ carTransfer, msg: "Car Transfered Successfully." });
 };
 
 export const getCarsTransferByUser = async (req, res) => {
@@ -83,105 +74,192 @@ export const getCarsTransferByUser = async (req, res) => {
 
   const { search, from, to } = req.query;
 
-  const queryObject = { userId };
+  const today = moment({ h: 0, m: 0, s: 0 }).format();
+
+  const queryObject = {
+    createdAt: { $gte: new Date(today), $lte: addDays(today) },
+    userId: mongoose.Types.ObjectId(userId),
+  };
 
   if (search) queryObject.licensePlate = { $regex: search, $options: "i" };
 
-  if (from)
-    queryObject.createdAt = {
-      $gte: new Date(from),
-    };
-  if (to)
-    queryObject.createdAt = {
-      $lte: addDays(to),
-    };
-  if (from && to)
-    queryObject.createdAt = {
-      $gte: new Date(from),
-      $lt: addDays(to),
-    };
+  if (from) queryObject.createdAt = { $gte: new Date(from) };
 
-  let result = CarTransfer.find(queryObject, "-__v -finalPrice").populate(
-    "locationId",
-    ["_id", "locationName", "locationType"]
-  );
+  if (to) queryObject.createdAt = { $lte: addDays(to) };
 
-  result = result.sort({ createdAt: -1 });
+  if (from && to) queryObject.createdAt = { $gte: new Date(from), $lt: addDays(to) };
 
   const page = Number(req.query.page) || 1;
   const limit = 10;
   const skip = (page - 1) * limit;
 
-  result = result.skip(skip).limit(limit);
+  let allCarTransferred = await CarTransfer.aggregate([
+    { $match: { ...queryObject } },
+    {
+      $lookup: {
+        from: "users",
+        localField: "userId",
+        foreignField: "_id",
+        as: "userId",
+      },
+    },
+    { $unwind: "$userId" },
+    {
+      $facet: {
+        metadata: [
+          {
+            $group: {
+              _id: null,
+              totalCarTransferred: { $sum: 1 },
+              totalPrice: { $sum: "$finalPrice" },
+            },
+          },
+          {
+            $project: { _id: 0, totalCarTransferred: 1, totalPrice: 1 },
+          },
+        ],
+        data: [{ $sort: { createdAt: -1 } }, { $skip: skip }, { $limit: limit }],
+      },
+    },
+  ]);
 
-  const carsTransfer = await result;
+  const { totalCarTransferred, totalPrice } = allCarTransferred[0].metadata[0] || 0;
 
-  if (!carsTransfer) throw new NotFoundError("Not found cars transfer");
+  if (!allCarTransferred.length)
+    throw new NotFoundError("No car was found that has been transferred.");
 
-  const totalCarsTransfer = await CarTransfer.countDocuments(queryObject);
-  const numOfPages = Math.ceil(totalCarsTransfer / limit);
+  const carTransferred = allCarTransferred[0].data.map((item) => {
+    const { _id, userId, createdAt, licensePlate, carType, transferType, finalPrice, suspect } =
+      item;
 
-  res
-    .status(StatusCodes.OK)
-    .json({ carsTransfer, totalCarsTransfer, numOfPages });
+    const { firstName, lastName } = userId;
+
+    const transferTypesNames = {
+      hzp: "HZP",
+      hbp: "HBP",
+      apdt: "AP-DT",
+      presumptive: "Transfer KM",
+    };
+
+    return {
+      _id,
+      user: `${firstName} ${lastName}`,
+      date: moment(createdAt).format("DD MMMM, hh:mm"),
+      licensePlate,
+      carType,
+      washType: transferTypesNames[transferType],
+      finalPrice,
+      suspect,
+    };
+  });
+
+  const numOfPages = Math.ceil(totalCarTransferred / limit) || 0;
+
+  res.status(StatusCodes.OK).json({
+    carTransferred,
+    totalCarTransferred,
+    totalPrice,
+    numOfPages,
+  });
 };
 
 export const getCarsTransferByLocation = async (req, res) => {
   adminAndManagerPermissions(req.user);
   const { id: locationId } = req.params;
 
-  if (!locationId) {
-    throw new BadRequestError("Please provide all values");
-  }
+  if (!locationId) throw new BadRequestError("Please provide all values");
 
   const { search, userId, from, to } = req.query;
 
-  const queryObject = { locationId };
+  const today = moment({ h: 0, m: 0, s: 0 }).format();
 
-  if (search) {
-    queryObject.licensePlate = { $regex: search, $options: "i" };
-  }
+  const queryObject = {
+    createdAt: { $gte: new Date(today), $lte: addDays(today) },
+    locationId: mongoose.Types.ObjectId(locationId),
+  };
 
-  if (userId) queryObject.userId = userId;
+  if (search) queryObject.licensePlate = { $regex: search, $options: "i" };
 
-  if (from)
-    queryObject.createdAt = {
-      $gte: new Date(from),
-    };
-  if (to)
-    queryObject.createdAt = {
-      $lte: addDays(to),
-    };
-  if (from && to)
-    queryObject.createdAt = {
-      $gte: new Date(from),
-      $lt: addDays(to),
-    };
+  if (userId) queryObject.userId = mongoose.Types.ObjectId(userId);
 
-  let result = CarTransfer.find(queryObject)
-    .populate("userId", ["_id", "firstName", "lastName"])
-    .populate("locationId", ["_id", "locationName", "locationType"]);
+  if (from) queryObject.createdAt = { $gte: new Date(from) };
 
-  result = result.sort({ createdAt: -1 });
+  if (to) queryObject.createdAt = { $lte: addDays(to) };
+
+  if (from && to) queryObject.createdAt = { $gte: new Date(from), $lt: addDays(to) };
 
   const page = Number(req.query.page) || 1;
   const limit = 10;
   const skip = (page - 1) * limit;
 
-  result = result.skip(skip).limit(limit);
+  let allCarTransferred = await CarTransfer.aggregate([
+    { $match: { ...queryObject } },
+    {
+      $lookup: {
+        from: "users",
+        localField: "userId",
+        foreignField: "_id",
+        as: "userId",
+      },
+    },
+    { $unwind: "$userId" },
+    {
+      $facet: {
+        metadata: [
+          {
+            $group: {
+              _id: null,
+              totalCarTransferred: { $sum: 1 },
+              totalPrice: { $sum: "$finalPrice" },
+            },
+          },
+          {
+            $project: { _id: 0, totalCarTransferred: 1, totalPrice: 1 },
+          },
+        ],
+        data: [{ $sort: { createdAt: -1 } }, { $skip: skip }, { $limit: limit }],
+      },
+    },
+  ]);
 
-  const carsTransferLocation = await result;
+  const { totalCarTransferred, totalPrice } = allCarTransferred[0].metadata[0] || 0;
 
-  if (!carsTransferLocation) throw new NotFoundError("Not found cars wash");
+  if (!allCarTransferred.length)
+    throw new NotFoundError("No car was found that has been transferred.");
 
-  const totalCarsTransferLocation = await CarTransfer.countDocuments(
-    queryObject
-  );
-  const numOfPages = Math.ceil(totalCarsTransferLocation / limit);
+  const carTransferred = allCarTransferred[0].data.map((item) => {
+    const { _id, userId, createdAt, licensePlate, carType, transferType, finalPrice, suspect } =
+      item;
 
-  res
-    .status(StatusCodes.OK)
-    .json({ carsTransferLocation, totalCarsTransferLocation, numOfPages });
+    const { firstName, lastName } = userId;
+
+    const transferTypesNames = {
+      hzp: "HZP",
+      hbp: "HBP",
+      apdt: "AP-DT",
+      presumptive: "Transfer KM",
+    };
+
+    return {
+      _id,
+      user: `${firstName} ${lastName}`,
+      date: moment(createdAt).format("DD MMMM, hh:mm"),
+      licensePlate,
+      carType,
+      washType: transferTypesNames[transferType],
+      finalPrice,
+      suspect,
+    };
+  });
+
+  const numOfPages = Math.ceil(totalCarTransferred / limit) || 0;
+
+  res.status(StatusCodes.OK).json({
+    carTransferred,
+    totalCarTransferred,
+    totalPrice,
+    numOfPages,
+  });
 };
 
 export const getCarTransfer = async (req, res) => {
@@ -205,13 +283,7 @@ export const updateCarTransfer = async (req, res) => {
     acceptSuspect,
   } = req.body;
 
-  if (
-    !licensePlate ||
-    !locationId ||
-    !carType ||
-    !transferType ||
-    !transferMethod
-  )
+  if (!licensePlate || !locationId || !carType || !transferType || !transferMethod)
     throw new BadRequestError("Please provide all values");
 
   const carTransfer = await CarTransfer.findOne({ _id: req.params.id });
@@ -228,8 +300,7 @@ export const updateCarTransfer = async (req, res) => {
     },
   });
 
-  if (carTransferCheck)
-    if (!acceptSuspect) return res.status(200).json({ suspected: true });
+  if (carTransferCheck) if (!acceptSuspect) return res.status(200).json({ suspected: true });
 
   let price;
 
@@ -254,9 +325,7 @@ export const updateCarTransfer = async (req, res) => {
 
   await carTransfer.save();
 
-  res
-    .status(200)
-    .json({ carTransfer, msg: "Car transfer successfully updated." });
+  res.status(200).json({ carTransfer, msg: "Car transfer successfully updated." });
 };
 
 export const updateCarTransferSuspect = async (req, res) => {
@@ -272,9 +341,7 @@ export const updateCarTransferSuspect = async (req, res) => {
 
   if (!carTransfer) throw new NotFoundError("Not found car transfer.");
 
-  res
-    .status(200)
-    .json({ carTransfer, msg: "Car transfer successfully updated." });
+  res.status(200).json({ carTransfer, msg: "Car transfer successfully updated." });
 };
 
 export const deleteCarTransfer = async (req, res) => {

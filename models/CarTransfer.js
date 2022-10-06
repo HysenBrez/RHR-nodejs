@@ -43,7 +43,7 @@ const CarTransfer = new mongoose.Schema(
       ],
     },
     finalPrice: {
-      type: String,
+      type: Number,
     },
     suspect: {
       type: Boolean,

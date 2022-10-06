@@ -8,7 +8,7 @@ import {
   checkForDate,
   checkInDescription,
   checkInByAdmin,
-  getAllCheckIns,
+  getCheckIns,
   deleteCheckInAdmin,
   updateCheckInAdmin,
   getCheckIn,
@@ -17,7 +17,7 @@ import {
   getExcelFile,
 } from "../controllers/checkInOutController.js";
 
-router.route("/admin").post(checkInByAdmin).get(getAllCheckIns);
+router.route("/admin").post(checkInByAdmin).get(getCheckIns);
 router.route("/admin/:id").patch(updateCheckInAdmin).delete(deleteCheckInAdmin);
 
 router.route("/start-break").patch(startBreak);

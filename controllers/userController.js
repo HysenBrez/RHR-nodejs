@@ -49,9 +49,7 @@ export const getUser = async (req, res) => {
 
   if (!user) throw new NotFoundError("Not found user");
 
-  res
-    .status(200)
-    .json({ ...user._doc, active: user.active ? "active" : "Inactive" });
+  res.status(200).json({ ...user._doc, active: user.active ? "active" : "Inactive" });
 };
 
 export const getAllUsers = async (req, res) => {
@@ -135,9 +133,7 @@ export const updateUser = async (req, res) => {
 
   const token = user.createJWT();
 
-  res
-    .status(StatusCodes.OK)
-    .json({ user, token, msg: "User has been updated." });
+  res.status(StatusCodes.OK).json({ user, token, msg: "User has been updated." });
 };
 
 export const changePassword = async (req, res) => {
@@ -148,25 +144,20 @@ export const changePassword = async (req, res) => {
     throw new BadRequestError("Please provide all values");
 
   if (newPassword !== confirmPassword)
-    throw new BadRequestError(
-      "New password and confirm password must be the same."
-    );
+    throw new BadRequestError("New password and confirm password must be the same.");
 
   const user = await User.findOne({ _id: userId }).select("+password");
 
   if (req.user.role !== "admin") {
     const isPasswordCorrect = await user.comparePassword(currentPassword);
-    if (!isPasswordCorrect)
-      throw new BadRequestError("Current password is incorrect");
+    if (!isPasswordCorrect) throw new BadRequestError("Current password is incorrect");
   }
 
   user.password = newPassword;
 
   await user.save();
 
-  res
-    .status(StatusCodes.OK)
-    .json({ userId, msg: "Password changed successfully", user });
+  res.status(StatusCodes.OK).json({ userId, msg: "Password changed successfully", user });
 };
 
 export const deleteUser = async (req, res) => {
@@ -185,6 +176,39 @@ export const deleteUser = async (req, res) => {
   await user.save();
 
   res.status(StatusCodes.OK).json({ msg: "Success! User Removed." });
+};
+
+export const restoreUser = async (req, res) => {
+  adminPermissions(req.user);
+
+  const { id } = req.params;
+
+  if (!id) throw new BadRequestError("Please provide all values");
+
+  const user = await User.findOne({ _id: id, deletedAt: { $ne: "" } });
+
+  if (!user) throw new NotFoundError("Not found user.");
+
+  user.deletedAt = "";
+
+  await user.save();
+
+  res.status(StatusCodes.OK).json({ msg: "The user has been restored successfully." });
+};
+
+export const deleteUserPermanently = async (req, res) => {
+  adminPermissions(req.user);
+
+  const { id } = req.params;
+
+  if (!id) throw new BadRequestError("Please provide all values");
+
+  const user = await User.deleteOne({ _id: id, deletedAt: { $ne: "" } });
+
+  console.log(user);
+  if (!user.deletedCount) throw new NotFoundError("Not found user.");
+
+  res.status(StatusCodes.OK).json({ msg: "The user has been deleted permanently." });
 };
 
 export const sendEmail = async (req, res) => {
@@ -270,10 +294,7 @@ export const getExcelFile = async (req, res) => {
   let result, totalData;
 
   if (type === "wash") {
-    result = CarWash.find(
-      queryObject,
-      " -_id -specialPrice -createdBy -updatedAt -__v"
-    )
+    result = CarWash.find(queryObject, " -_id -specialPrice -createdBy -updatedAt -__v")
       .populate("userId", ["firstName", "lastName"])
       .populate("locationId", ["locationName", "locationType"]);
 
@@ -281,10 +302,7 @@ export const getExcelFile = async (req, res) => {
   }
 
   if (type === "transfer") {
-    result = CarTransfer.find(
-      queryObject,
-      " -_id -specialPrice -createdBy -updatedAt -__v"
-    )
+    result = CarTransfer.find(queryObject, " -_id -specialPrice -createdBy -updatedAt -__v")
       .populate("userId", ["firstName", "lastName"])
       .populate("locationId", ["locationName", "locationType"]);
 

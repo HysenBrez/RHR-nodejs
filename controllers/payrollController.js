@@ -2,12 +2,23 @@ import moment from "moment";
 import { StatusCodes } from "http-status-codes";
 
 import Payroll from "../models/Payroll.js";
+import User from "../models/User.js";
 import { BadRequestError, NotFoundError } from "../errors/index.js";
 
-export const checkPayroll = async (req, res) => {
+export const checkUsersForPayroll = async (req, res) => {
   const { date } = req.query;
 
-  //   const users = await
+  if (!date) throw new BadRequestError("Please provide all values");
+
+  const getUsersIds = await Payroll.distinct("userId", { monthYear: date });
+
+  const users = await User.find({
+    _id: { $nin: getUsersIds },
+    role: "user",
+    active: true,
+  });
+
+  res.status(201).json({ getIds, users });
 };
 
 export const createPayroll = async (req, res) => {
@@ -81,12 +92,12 @@ export const getPayrolls = async (req, res) => {
     };
   if (to)
     queryObject.createdAt = {
-      $lte: new Date(addDays(to)),
+      $lte: addDays(to),
     };
   if (from && to)
     queryObject.createdAt = {
       $gte: new Date(from),
-      $lt: new Date(addDays(to)),
+      $lt: addDays(to),
     };
 
   let result = Payroll.find(queryObject);

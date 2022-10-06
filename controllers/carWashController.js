@@ -2,26 +2,15 @@ import mongoose from "mongoose";
 import { StatusCodes } from "http-status-codes";
 
 import CarWash from "../models/CarWash.js";
-import {
-  BadRequestError,
-  NotFoundError,
-  UnAuthenticatedError,
-} from "../errors/index.js";
+import { BadRequestError, NotFoundError, UnAuthenticatedError } from "../errors/index.js";
 import { adminAndManagerPermissions } from "../utils/checkPermissions.js";
 import Location from "../models/Location.js";
 import moment from "moment";
 import { addDays } from "../utils/helpers.js";
 
 export const carWash = async (req, res) => {
-  const {
-    userId,
-    licensePlate,
-    locationId,
-    carType,
-    washType,
-    specialPrice,
-    acceptSuspect,
-  } = req.body;
+  const { userId, licensePlate, locationId, carType, washType, specialPrice, acceptSuspect } =
+    req.body;
 
   if (!userId || !licensePlate || !locationId || !carType || !washType) {
     throw new BadRequestError("Please provide all values");
@@ -35,8 +24,7 @@ export const carWash = async (req, res) => {
     createdAt: { $gte: date.toISOString(), $lt: new Date() },
   });
 
-  if (carWashCheck)
-    if (!acceptSuspect) return res.status(200).json({ suspected: true });
+  if (carWashCheck) if (!acceptSuspect) return res.status(200).json({ suspected: true });
 
   let price;
 
@@ -70,53 +58,94 @@ export const getCarsWashByUser = async (req, res) => {
   const { search, from, to } = req.query;
   const { id: userId } = req.params;
 
-  if (!userId) {
-    throw new BadRequestError("Please provide all values");
-  }
+  if (!userId) throw new BadRequestError("Please provide all values");
 
-  const queryObject = { userId };
+  const today = moment({ h: 0, m: 0, s: 0 }).format();
 
-  if (search) {
-    queryObject.licensePlate = { $regex: search, $options: "i" };
-  }
+  const queryObject = {
+    createdAt: { $gte: new Date(today), $lte: addDays(today) },
+    userId: mongoose.Types.ObjectId(userId),
+  };
 
-  if (from)
-    queryObject.createdAt = {
-      $gte: new Date(from),
-    };
-  if (to)
-    queryObject.createdAt = {
-      $lte: addDays(to),
-    };
-  if (from && to)
-    queryObject.createdAt = {
-      $gte: new Date(from),
-      $lt: addDays(to),
-    };
+  if (search) queryObject.licensePlate = { $regex: search, $options: "i" };
 
-  let result = CarWash.find(queryObject, "-__v -finalPrice").populate(
-    "locationId",
-    ["_id", "locationName", "locationType"]
-  );
+  if (from) queryObject.createdAt = { $gte: new Date(from) };
 
-  result = result.sort({ createdAt: -1 });
+  if (to) queryObject.createdAt = { $lte: addDays(to) };
+
+  if (from && to) queryObject.createdAt = { $gte: new Date(from), $lt: addDays(to) };
 
   const page = Number(req.query.page) || 1;
   const limit = 10;
   const skip = (page - 1) * limit;
 
-  result = result.skip(skip).limit(limit);
+  let allCarWashed = await CarWash.aggregate([
+    { $match: { ...queryObject } },
+    {
+      $lookup: {
+        from: "users",
+        localField: "userId",
+        foreignField: "_id",
+        as: "userId",
+      },
+    },
+    { $unwind: "$userId" },
+    {
+      $facet: {
+        metadata: [
+          {
+            $group: {
+              _id: null,
+              totalCarWashed: { $sum: 1 },
+              totalPrice: { $sum: "$finalPrice" },
+            },
+          },
+          { $project: { _id: 0, totalCarWashed: 1, totalPrice: 1 } },
+        ],
+        data: [{ $sort: { createdAt: -1 } }, { $skip: skip }, { $limit: limit }],
+      },
+    },
+  ]);
 
-  const carsWash = await result;
+  const { totalCarWashed, totalPrice } = allCarWashed[0].metadata[0] || 0;
 
-  if (!carsWash) {
-    throw new NotFoundError("Not found cars wash");
-  }
+  if (!allCarWashed.length) throw new NotFoundError("Not found car washed.");
 
-  const totalCarsWash = await CarWash.countDocuments(queryObject);
-  const numOfPages = Math.ceil(totalCarsWash / limit);
+  const carWashed = allCarWashed[0].data.map((item) => {
+    const { _id, userId, createdAt, licensePlate, carType, washType, finalPrice, suspect } = item;
 
-  res.status(StatusCodes.OK).json({ carsWash, totalCarsWash, numOfPages });
+    const { firstName, lastName } = userId;
+
+    const washTypesNames = {
+      outside: "Aussenreinigung",
+      inside: "Innenreinigung",
+      outInside: "Kombipaket",
+      motorrad: "Motorrad wäsche",
+      turnaround: "Turnaround",
+      quickTurnaround: "Quick Turnaround",
+      special: "Spezial",
+    };
+
+    return {
+      _id,
+      user: `${firstName} ${lastName}`,
+      date: moment(createdAt).format("DD MMMM, hh:mm"),
+      licensePlate,
+      carType,
+      washType: washTypesNames[washType],
+      finalPrice,
+      suspect,
+    };
+  });
+
+  const numOfPages = Math.ceil(totalCarWashed / limit) || 0;
+
+  res.status(StatusCodes.OK).json({
+    carWashed,
+    totalCarWashed,
+    totalPrice,
+    numOfPages,
+  });
 };
 
 export const getCarsWashByLocation = async (req, res) => {
@@ -124,19 +153,20 @@ export const getCarsWashByLocation = async (req, res) => {
 
   const { id: locationId } = req.params;
 
-  if (!locationId) {
-    throw new BadRequestError("Please provide all values");
-  }
+  if (!locationId) throw new BadRequestError("Please provide all values");
 
   const { search, userId, from, to } = req.query;
 
-  const queryObject = { locationId };
+  const today = moment({ h: 0, m: 0, s: 0 }).format();
 
-  if (search) {
-    queryObject.licensePlate = { $regex: search, $options: "i" };
-  }
+  const queryObject = {
+    createdAt: { $gte: new Date(today), $lte: addDays(today) },
+    locationId: mongoose.Types.ObjectId(locationId),
+  };
 
-  if (userId) queryObject.userId = userId;
+  if (search) queryObject.licensePlate = { $regex: search, $options: "i" };
+
+  if (userId) queryObject.userId = mongoose.Types.ObjectId(userId);
 
   if (from)
     queryObject.createdAt = {
@@ -152,28 +182,87 @@ export const getCarsWashByLocation = async (req, res) => {
       $lt: addDays(to),
     };
 
-  let result = CarWash.find(queryObject)
-    .populate("userId", ["_id", "firstName", "lastName"])
-    .populate("locationId", ["_id", "locationName", "locationType"]);
-
-  result = result.sort({ createdAt: -1 });
-
   const page = Number(req.query.page) || 1;
   const limit = 10;
   const skip = (page - 1) * limit;
 
-  result = result.skip(skip).limit(limit);
+  let allCarWashed = await CarWash.aggregate([
+    {
+      $match: { ...queryObject },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "userId",
+        foreignField: "_id",
+        as: "userId",
+      },
+    },
+    {
+      $unwind: "$userId",
+    },
+    {
+      $facet: {
+        metadata: [
+          {
+            $group: {
+              _id: null,
+              totalCarWashed: { $sum: 1 },
+              totalPrice: { $sum: "$finalPrice" },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              totalCarWashed: 1,
+              totalPrice: 1,
+            },
+          },
+        ],
+        data: [{ $sort: { createdAt: -1 } }, { $skip: skip }, { $limit: limit }],
+      },
+    },
+  ]);
 
-  const carsWashLocation = await result;
+  const { totalCarWashed, totalPrice } = allCarWashed[0].metadata[0] || 0;
 
-  if (!carsWashLocation) throw new NotFoundError("Not found cars wash");
+  if (!allCarWashed.length) throw new NotFoundError("Not found car washed.");
 
-  const totalCarsWashLocation = await CarWash.countDocuments(queryObject);
-  const numOfPages = Math.ceil(totalCarsWashLocation / limit);
+  const carWashed = allCarWashed[0].data.map((item) => {
+    const { _id, userId, createdAt, licensePlate, carType, washType, finalPrice, suspect } = item;
 
-  res
-    .status(StatusCodes.OK)
-    .json({ carsWashLocation, totalCarsWashLocation, numOfPages });
+    const { firstName, lastName } = userId;
+
+    const washTypesNames = {
+      outside: "Aussenreinigung",
+      inside: "Innenreinigung",
+      outInside: "Kombipaket",
+      motorrad: "Motorrad wäsche",
+      turnaround: "Turnaround",
+      quickTurnaround: "Quick Turnaround",
+      special: "Spezial",
+    };
+
+    return {
+      _id,
+      user: `${firstName} ${lastName}`,
+      date: moment(createdAt).format("DD MMMM, hh:mm"),
+      licensePlate,
+      carType,
+      washType: washTypesNames[washType],
+      finalPrice,
+      suspect,
+    };
+  });
+
+  const numOfPages = Math.ceil(totalCarWashed / limit) || 0;
+
+  res.status(StatusCodes.OK).json({
+    carWashed,
+    totalCarWashed,
+    totalPrice,
+    numOfPages,
+  });
 };
 
 export const getCarWash = async (req, res) => {
@@ -189,14 +278,7 @@ export const getCarWash = async (req, res) => {
 };
 
 export const updateCarWash = async (req, res) => {
-  const {
-    licensePlate,
-    locationId,
-    carType,
-    washType,
-    specialPrice,
-    acceptSuspect,
-  } = req.body;
+  const { licensePlate, locationId, carType, washType, specialPrice, acceptSuspect } = req.body;
 
   if (!licensePlate || !locationId || !carType || !washType)
     throw new BadRequestError("Please provide all values");
@@ -215,8 +297,7 @@ export const updateCarWash = async (req, res) => {
     },
   });
 
-  if (carWashCheck)
-    if (!acceptSuspect) return res.status(200).json({ suspected: true });
+  if (carWashCheck) if (!acceptSuspect) return res.status(200).json({ suspected: true });
 
   let price;
 
@@ -267,9 +348,7 @@ export const deleteCarWash = async (req, res) => {
 
   const carWash = CarWash.find({ _id: id });
 
-  if (!carWash) {
-    throw new NotFoundError("Not found car wash!");
-  }
+  if (!carWash) throw new NotFoundError("Not found car wash!");
 
   await CarWash.deleteOne({ _id: id });
 

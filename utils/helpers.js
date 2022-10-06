@@ -31,15 +31,15 @@ export const format24h = (time) => {
 };
 
 export const addDays = (date, day = 1, format = false) => {
-  if (format) return moment(date).add(day, "days").format("YYYY-MM-DD");
+  if (format) return new Date(moment(date).add(day, "days").format("YYYY-MM-DD"));
 
-  return moment(date).add(day, "days").format();
+  return new Date(moment(date).add(day, "days").format());
 };
 
 export const addMonths = (date, month = 1, format = true) => {
-  if (format) return moment(date).add(month, "months").format("YYYY-MM-DD");
+  if (format) return new Date(moment(date).add(month, "months").format("YYYY-MM-DD"));
 
-  return moment(date).add(month, "months").format();
+  return new Date(moment(date).add(month, "months").format());
 };
 
 export const checkSuspect = (endTime) => {

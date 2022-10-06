@@ -95,9 +95,7 @@ export const checkIn = async (req, res) => {
   ]);
 
   if (checkData.length)
-    throw new BadRequestError(
-      "You can't create check-in twice for the same day."
-    );
+    throw new BadRequestError("You can't create check-in twice for the same day.");
 
   const checkIn = await CheckInOut.create({
     userId,
@@ -116,8 +114,7 @@ export const checkIn = async (req, res) => {
 export const startBreak = async (req, res) => {
   const { checkInId, startBreak } = req.body;
 
-  if (!checkInId || !startBreak)
-    throw new BadRequestError("Please provide all values");
+  if (!checkInId || !startBreak) throw new BadRequestError("Please provide all values");
 
   const checkBreak = await CheckInOut.findOne({
     _id: checkInId,
@@ -140,8 +137,7 @@ export const startBreak = async (req, res) => {
 export const endBreak = async (req, res) => {
   const { checkInId, breakId, endBreak } = req.body;
 
-  if (!checkInId || !breakId || !endBreak)
-    throw new BadRequestError("Please provide all values");
+  if (!checkInId || !breakId || !endBreak) throw new BadRequestError("Please provide all values");
 
   const checkData = await CheckInOut.findOneAndUpdate(
     { _id: checkInId, "breaks._id": breakId },
@@ -157,8 +153,7 @@ export const endBreak = async (req, res) => {
 export const checkOut = async (req, res) => {
   const { checkInId, endTime, endTimeLocation } = req.body;
 
-  if (!checkInId || !endTime)
-    throw new BadRequestError("Please provide all values");
+  if (!checkInId || !endTime) throw new BadRequestError("Please provide all values");
 
   const checkIn = await CheckInOut.findOne({ _id: checkInId });
 
@@ -183,85 +178,99 @@ export const checkOut = async (req, res) => {
 export const getCheckInsByUser = async (req, res) => {
   const { userId } = req.params;
 
-  const { from, to } = req.query;
+  const { from, to, total } = req.query;
 
-  const date20 = moment().set({ D: 20 }).format("YYYY-MM-DD");
+  let date20 = moment().set({ D: 20 }).format("YYYY-MM-DD");
 
-  // Add more ...
+  if (moment().format("D") < 20) date20 = moment(date20).subtract(1, "months").format("YYYY-MM-DD");
 
   const queryObject = {
-    startTime: { $gte: date20, $lte: addMonths(date20) }, // 20-19
+    startTime: { $gte: new Date(date20), $lte: addMonths(date20) }, // 20-19
   };
 
   if (!userId) throw new BadRequestError("Please provide all values");
 
-  if (userId) queryObject.userId = userId;
+  if (userId) queryObject.userId = mongoose.Types.ObjectId(userId);
 
-  if (from)
-    queryObject.startTime = {
-      $gte: new Date(from),
-    };
-  if (to)
-    queryObject.startTime = {
-      $lte: addDays(to),
-    };
-  if (from && to)
-    queryObject.startTime = {
-      $gte: new Date(from),
-      $lte: addDays(to),
-    };
+  if (from) queryObject.startTime = { $gte: new Date(from) };
 
-  let result = CheckInOut.find(queryObject);
+  if (to) queryObject.startTime = { $lte: addDays(to) };
 
-  result = result.sort({ startTime: -1 });
-
-  let allCheckIns = await result;
-
-  let totalMins = 0;
-  let totalSalary = 0;
-
-  allCheckIns.forEach((item) => {
-    const { workHoursInMins, dailySalary } = item;
-
-    if (workHoursInMins) {
-      totalMins += workHoursInMins;
-      totalSalary += dailySalary;
-    }
-  });
+  if (from && to) queryObject.startTime = { $gte: new Date(from), $lte: addDays(to) };
 
   const page = Number(req.query.page) || 1;
   const limit = 10;
   const skip = (page - 1) * limit;
 
-  result = result.skip(skip).limit(limit);
+  let allCheckIns = await CheckInOut.aggregate([
+    { $match: { ...queryObject } },
+    {
+      $lookup: {
+        from: "users",
+        localField: "userId",
+        foreignField: "_id",
+        as: "userId",
+      },
+    },
+    {
+      $facet: {
+        metadata: [
+          {
+            $group: {
+              _id: null,
+              totalCheckIns: { $sum: 1 },
+              totalMins: { $sum: "$workHoursInMins" },
+              totalSalary: { $sum: "$dailySalary" },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              totalCheckIns: 1,
+              totalMins: 1,
+              totalSalary: 1,
+            },
+          },
+        ],
+        data: [{ $sort: { startTime: -1 } }, { $skip: skip }, { $limit: limit }],
+      },
+    },
+  ]);
 
-  let checkIns = await result.clone();
+  const { totalCheckIns, totalMins, totalSalary } = allCheckIns[0].metadata[0] || 0;
 
-  if (!checkIns) throw new NotFoundError("Not found check-ins");
+  if (!allCheckIns.length) throw new NotFoundError("Not found check-ins");
 
-  checkIns = checkIns.map((item) => {
-    const { _id, userId, startTime, endTime, workHoursInMins, suspect } = item;
+  const checkIns = allCheckIns[0].data.map((item) => {
+    const { _id, userId, startTime, endTime, workHoursInMins, dailySalary, suspect } = item;
+
+    const { firstName, lastName } = userId[0];
 
     return {
       _id,
-      userId,
+      user: `${firstName} ${lastName}`,
       date: moment(startTime).format("DD MMMM, YYYY"),
       startTime: format24h(startTime),
       endTime: !checkSuspect(endTime) ? format24h(endTime) : "-",
       workHours: toHoursAndMins(workHoursInMins, true),
+      dailySalary,
       suspect: equalDays(startTime) ? false : suspect,
     };
   });
 
-  const totalCheckIns = allCheckIns.length;
-  const numOfPages = Math.ceil(allCheckIns / limit);
+  const numOfPages = Math.ceil(totalCheckIns / limit);
+
+  let hourlyPay = 0;
+
+  if (total == "true") hourlyPay = (await User.findOne({ _id: userId })).hourlyPay;
 
   res.status(StatusCodes.OK).json({
-    checkIns,
-    totalCheckIns,
-    totalHours: toHoursAndMins(totalMins, true),
-    totalSalary: totalSalary.toFixed(2),
-    numOfPages,
+    hourlyPay: total ? hourlyPay : undefined,
+    checkIns: !total ? checkIns : undefined,
+    totalHours: totalMins ? toHoursAndMins(totalMins, true) : 0,
+    totalSalary: totalSalary || 0,
+    totalCheckIns: totalCheckIns ? totalCheckIns : 0,
+    numOfPages: numOfPages ? numOfPages : 0,
   });
 };
 
@@ -307,10 +316,7 @@ export const getCheckIn = async (req, res) => {
 
   res.status(200).json({
     ...checkIn._doc,
-    endTime:
-      equalDays(checkIn.startTime) && checkSuspect(checkIn.endTime)
-        ? null
-        : checkIn.endTime,
+    endTime: equalDays(checkIn.startTime) && checkSuspect(checkIn.endTime) ? null : checkIn.endTime,
     activeBreak,
     workHours: toHoursAndMins(checkIn.workHoursInMins, true),
   });
@@ -321,8 +327,7 @@ export const checkInByAdmin = async (req, res) => {
 
   const { userId, startTime, endTime, description } = req.body;
 
-  if (!userId || !startTime || !endTime)
-    throw new BadRequestError("Please provide all values");
+  if (!userId || !startTime || !endTime) throw new BadRequestError("Please provide all values");
 
   const checkData = await CheckInOut.aggregate([
     {
@@ -344,9 +349,7 @@ export const checkInByAdmin = async (req, res) => {
   ]);
 
   if (checkData.length)
-    throw new BadRequestError(
-      "You can't create check-in twice for the same day."
-    );
+    throw new BadRequestError("You can't create check-in twice for the same day.");
 
   const minutes = diffInMins(endTime, startTime);
 
@@ -366,7 +369,7 @@ export const checkInByAdmin = async (req, res) => {
   res.status(201).json(checkIn);
 };
 
-export const getAllCheckIns = async (req, res) => {
+export const getCheckIns = async (req, res) => {
   adminPermissions(req.user);
 
   const { userId, locationId, from, to } = req.query;
@@ -374,7 +377,7 @@ export const getAllCheckIns = async (req, res) => {
   const today = moment({ h: 0, m: 0, s: 0 }).format();
 
   let queryObject = {
-    startTime: { $gte: new Date(today), $lte: new Date(addDays(today)) },
+    startTime: { $gte: new Date(today), $lte: addDays(today) },
   };
 
   if (userId) queryObject.userId = mongoose.Types.ObjectId(userId);
@@ -391,13 +394,13 @@ export const getAllCheckIns = async (req, res) => {
 
   if (to)
     queryObject.startTime = {
-      $lte: new Date(addDays(to)),
+      $lte: addDays(to),
     };
 
   if (from && to)
     queryObject.startTime = {
       $gte: new Date(from),
-      $lte: new Date(addDays(to)),
+      $lte: addDays(to),
     };
 
   const page = Number(req.query.page) || 1;
@@ -436,30 +439,17 @@ export const getAllCheckIns = async (req, res) => {
             },
           },
         ],
-        data: [
-          { $sort: { startTime: -1 } },
-          { $skip: skip },
-          { $limit: limit },
-        ],
+        data: [{ $sort: { startTime: -1 } }, { $skip: skip }, { $limit: limit }],
       },
     },
   ]);
 
-  const { totalCheckIns, totalMins, totalSalary } =
-    allCheckIns[0].metadata[0] || 0;
+  const { totalCheckIns, totalMins, totalSalary } = allCheckIns[0].metadata[0] || 0;
 
   if (!allCheckIns.length) throw new NotFoundError("Not found check-ins");
 
   const checkIns = allCheckIns[0].data.map((item) => {
-    const {
-      _id,
-      userId,
-      startTime,
-      endTime,
-      workHoursInMins,
-      dailySalary,
-      suspect,
-    } = item;
+    const { _id, userId, startTime, endTime, workHoursInMins, dailySalary, suspect } = item;
 
     const { firstName, lastName } = userId[0];
 
@@ -491,8 +481,7 @@ export const updateCheckInAdmin = async (req, res) => {
 
   const { startTime, endTime, breaks, description } = req.body;
 
-  if (!startTime || !endTime)
-    throw new BadRequestError("Please provide all values");
+  if (!startTime || !endTime) throw new BadRequestError("Please provide all values");
 
   const checkIn = await CheckInOut.findOne({ _id: req.params.id });
 
@@ -561,10 +550,10 @@ export const getExcelFile = async (req, res) => {
 
   let result, totalData;
 
-  result = CheckInOut.find(
-    queryObject,
-    " -_id -createdBy -updatedAt -__v"
-  ).populate("userId", ["firstName", "lastName"]);
+  result = CheckInOut.find(queryObject, " -_id -createdBy -updatedAt -__v").populate("userId", [
+    "firstName",
+    "lastName",
+  ]);
 
   result = result.sort({ startTime: -1 });
 
@@ -593,14 +582,10 @@ export const getExcelFile = async (req, res) => {
       user: `${firstName} ${lastName}`,
       date: moment(startTime).format("DD-MM-YYYY"),
       checkIn: startLoc
-        ? `${format24h(startTime)} (${startLoc?.address?.road}, ${
-            startLoc?.address?.city
-          })`
+        ? `${format24h(startTime)} (${startLoc?.address?.road}, ${startLoc?.address?.city})`
         : format24h(startTime),
       checkOut: endLoc
-        ? `${format24h(endTime)} (${endLoc?.address?.road}, ${
-            endLoc?.address?.city
-          })`
+        ? `${format24h(endTime)} (${endLoc?.address?.road}, ${endLoc?.address?.city})`
         : format24h(endTime),
       workHours: toHoursAndMins(workHoursInMins, true),
       dailySalary,
