@@ -47,13 +47,13 @@ export const getUser = async (req, res) => {
 
   const user = await User.findOne({ _id: id });
 
-  if (!user) throw new NotFoundError("Not found user");
+  if (!user) throw new NotFoundError("Not found user.");
 
   res.status(200).json({ ...user._doc, active: user.active ? "active" : "Inactive" });
 };
 
 export const getAllUsers = async (req, res) => {
-  const { active, search, sort, sortBy } = req.query;
+  const { active, search, sort, sortBy, role } = req.query;
 
   let queryObject = {
     active: true,
@@ -73,6 +73,8 @@ export const getAllUsers = async (req, res) => {
   }
 
   if (active == "false") queryObject.active = false;
+
+  if (role) queryObject.role = { $in: role.split(",") };
 
   let result = User.find(queryObject)
     .collation({ locale: "en" })
@@ -106,6 +108,7 @@ export const updateUser = async (req, res) => {
     street,
     postalCode,
     place,
+    ahv,
     hourlyPay,
   } = req.body;
 
@@ -123,6 +126,7 @@ export const updateUser = async (req, res) => {
   user.street = street;
   user.postalCode = postalCode;
   user.place = place;
+  user.ahv = ahv;
   user.description = description;
   user.role = role;
   user.hourlyPay = hourlyPay;

@@ -260,12 +260,17 @@ export const getCheckInsByUser = async (req, res) => {
 
   const numOfPages = Math.ceil(totalCheckIns / limit);
 
-  let hourlyPay = 0;
+  let user;
 
-  if (total == "true") hourlyPay = (await User.findOne({ _id: userId })).hourlyPay;
+  if (total == "true") {
+    user = await User.findOne(
+      { _id: userId },
+      { firstName: 1, lastName: 1, email: 1, street: 1, postalCode: 1, ahv: 1, hourlyPay: 1 }
+    );
+  }
 
   res.status(StatusCodes.OK).json({
-    hourlyPay: total ? hourlyPay : undefined,
+    user: total ? user : undefined,
     checkIns: !total ? checkIns : undefined,
     totalHours: totalMins ? toHoursAndMins(totalMins, true) : 0,
     totalSalary: totalSalary || 0,
@@ -277,15 +282,11 @@ export const getCheckInsByUser = async (req, res) => {
 export const checkInDescription = async (req, res) => {
   const { userId, startTime, description } = req.body;
 
-  if (!userId || !startTime || !description) {
-    throw new BadRequestError("Please provide all values");
-  }
+  if (!userId || !startTime || !description) throw new BadRequestError("Please provide all values");
 
   const checkIn = await CheckInOut.findOne({ userId, startTime });
 
-  if (!checkIn) {
-    throw new NotFoundError("Not found check-in");
-  }
+  if (!checkIn) throw new NotFoundError("Not found check-in");
 
   checkIn.description = description;
 
