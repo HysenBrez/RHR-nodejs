@@ -257,7 +257,7 @@ export const getCarsWashByLocation = async (req, res) => {
 
   res.status(StatusCodes.OK).json({
     carWashed,
-    totalCarWashed,
+    totalCarWashed: totalCarWashed ? totalCarWashed : 0,
     totalPrice,
     numOfPages,
   });

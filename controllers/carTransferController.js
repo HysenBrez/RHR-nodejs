@@ -265,7 +265,7 @@ export const getCarsTransferByLocation = async (req, res) => {
 
   res.status(StatusCodes.OK).json({
     carTransferred,
-    totalCarTransferred,
+    totalCarTransferred: totalCarTransferred ? totalCarTransferred : 0,
     totalPrice,
     numOfPages,
   });
