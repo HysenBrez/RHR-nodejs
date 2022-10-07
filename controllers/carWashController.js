@@ -97,17 +97,16 @@ export const getCarsWashByUser = async (req, res) => {
             $group: {
               _id: null,
               totalCarWashed: { $sum: 1 },
-              totalPrice: { $sum: "$finalPrice" },
             },
           },
-          { $project: { _id: 0, totalCarWashed: 1, totalPrice: 1 } },
+          { $project: { _id: 0, totalCarWashed: 1 } },
         ],
         data: [{ $sort: { createdAt: -1 } }, { $skip: skip }, { $limit: limit }],
       },
     },
   ]);
 
-  const { totalCarWashed, totalPrice } = allCarWashed[0].metadata[0] || 0;
+  const { totalCarWashed } = allCarWashed[0].metadata[0] || 0;
 
   if (!allCarWashed.length) throw new NotFoundError("Not found car washed.");
 
@@ -142,8 +141,7 @@ export const getCarsWashByUser = async (req, res) => {
 
   res.status(StatusCodes.OK).json({
     carWashed,
-    totalCarWashed,
-    totalPrice,
+    totalCarWashed: totalCarWashed ? totalCarWashed : 0,
     numOfPages,
   });
 };

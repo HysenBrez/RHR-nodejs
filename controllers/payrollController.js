@@ -6,7 +6,7 @@ import User from "../models/User.js";
 import { BadRequestError, NotFoundError } from "../errors/index.js";
 
 export const checkUsersForPayroll = async (req, res) => {
-  const { date } = req.query;
+  const { date, role } = req.query;
 
   if (!date) throw new BadRequestError("Please provide all values");
 
@@ -14,7 +14,7 @@ export const checkUsersForPayroll = async (req, res) => {
 
   const users = await User.find({
     _id: { $nin: getUsersIds },
-    role: "user",
+    role: role ? { $in: role.split(",") } : "user",
     active: true,
   });
 
@@ -55,7 +55,7 @@ export const createPayroll = async (req, res) => {
     !monthlyDeduction ||
     !taxes
   )
-    throw new BadRequestError("Please provide all values");
+    throw new BadRequestError("Please provide all values.");
 
   const payroll = await Payroll.create({
     userId,
@@ -77,6 +77,18 @@ export const createPayroll = async (req, res) => {
   });
 
   res.status(201).json({ payroll, msg: "Payroll created successfully." });
+};
+
+export const getPayroll = async (req, res) => {
+  const { id } = req.params;
+
+  if (!id) throw new BadRequestError("Please provide all values.");
+
+  const payroll = await Payroll.findOne({ _id: id });
+
+  if (!payroll) throw new NotFoundError("Not Found Payroll.");
+
+  res.status(StatusCodes.OK).json({ payroll });
 };
 
 export const getPayrolls = async (req, res) => {

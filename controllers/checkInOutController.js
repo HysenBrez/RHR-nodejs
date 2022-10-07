@@ -178,11 +178,19 @@ export const checkOut = async (req, res) => {
 export const getCheckInsByUser = async (req, res) => {
   const { userId } = req.params;
 
-  const { from, to, total } = req.query;
+  const { from, to, total, date } = req.query;
 
   let date20 = moment().set({ D: 20 }).format("YYYY-MM-DD");
 
-  if (moment().format("D") < 20) date20 = moment(date20).subtract(1, "months").format("YYYY-MM-DD");
+  if (date) {
+    const month = Number(date.split("-")[1]);
+    date20 = moment()
+      .set({ M: month - 2, D: 20 })
+      .format("YYYY-MM-DD");
+  } else {
+    if (moment().format("D") < 20)
+      date20 = moment(date20).subtract(1, "months").format("YYYY-MM-DD");
+  }
 
   const queryObject = {
     startTime: { $gte: new Date(date20), $lte: addMonths(date20) }, // 20-19
@@ -272,7 +280,7 @@ export const getCheckInsByUser = async (req, res) => {
   res.status(StatusCodes.OK).json({
     user: total ? user : undefined,
     checkIns: !total ? checkIns : undefined,
-    totalHours: totalMins ? toHoursAndMins(totalMins, true) : 0,
+    totalHours: totalMins ? toHoursAndMins(totalMins) : 0,
     totalSalary: totalSalary || 0,
     totalCheckIns: totalCheckIns ? totalCheckIns : 0,
     numOfPages: numOfPages ? numOfPages : 0,

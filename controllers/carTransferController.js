@@ -111,11 +111,10 @@ export const getCarsTransferByUser = async (req, res) => {
             $group: {
               _id: null,
               totalCarTransferred: { $sum: 1 },
-              totalPrice: { $sum: "$finalPrice" },
             },
           },
           {
-            $project: { _id: 0, totalCarTransferred: 1, totalPrice: 1 },
+            $project: { _id: 0, totalCarTransferred: 1 },
           },
         ],
         data: [{ $sort: { createdAt: -1 } }, { $skip: skip }, { $limit: limit }],
@@ -123,7 +122,7 @@ export const getCarsTransferByUser = async (req, res) => {
     },
   ]);
 
-  const { totalCarTransferred, totalPrice } = allCarTransferred[0].metadata[0] || 0;
+  const { totalCarTransferred } = allCarTransferred[0].metadata[0] || 0;
 
   if (!allCarTransferred.length)
     throw new NotFoundError("No car was found that has been transferred.");
@@ -167,8 +166,7 @@ export const getCarsTransferByUser = async (req, res) => {
 
   res.status(StatusCodes.OK).json({
     carTransferred,
-    totalCarTransferred,
-    totalPrice,
+    totalCarTransferred: totalCarTransferred ? totalCarTransferred : 0,
     numOfPages,
   });
 };
@@ -256,7 +254,8 @@ export const getCarsTransferByLocation = async (req, res) => {
       date: moment(createdAt).format("DD MMMM, hh:mm"),
       licensePlate,
       carType,
-      washType: transferTypesNames[transferType],
+      transferMethod,
+      transferType: transferTypesNames[transferType],
       finalPrice,
       suspect,
     };
