@@ -53,7 +53,7 @@ export const getUser = async (req, res) => {
 };
 
 export const getAllUsers = async (req, res) => {
-  const { active, search, sort, sortBy, role } = req.query;
+  const { search, active, role, deleted } = req.query;
 
   let queryObject = {
     active: true,
@@ -75,6 +75,8 @@ export const getAllUsers = async (req, res) => {
   if (active == "false") queryObject.active = false;
 
   if (role) queryObject.role = { $in: role.split(",") };
+
+  if (deleted == "true") queryObject.deletedAt = { $ne: "" };
 
   let result = User.find(queryObject)
     .collation({ locale: "en" })
