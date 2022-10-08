@@ -76,7 +76,10 @@ export const getAllUsers = async (req, res) => {
 
   if (role) queryObject.role = { $in: role.split(",") };
 
-  if (deleted == "true") queryObject.deletedAt = { $ne: "" };
+  if (deleted == "true") {
+    queryObject.deletedAt = { $ne: "" };
+    queryObject.active = { $in: [true, false] };
+  }
 
   let result = User.find(queryObject)
     .collation({ locale: "en" })
@@ -193,7 +196,7 @@ export const restoreUser = async (req, res) => {
 
   const user = await User.findOne({ _id: id, deletedAt: { $ne: "" } });
 
-  if (!user) throw new NotFoundError("Not found user.");
+  if (!user) throw new NotFoundError("User Not Found.");
 
   user.deletedAt = "";
 
@@ -211,8 +214,7 @@ export const deleteUserPermanently = async (req, res) => {
 
   const user = await User.deleteOne({ _id: id, deletedAt: { $ne: "" } });
 
-  console.log(user);
-  if (!user.deletedCount) throw new NotFoundError("Not found user.");
+  if (!user.deletedCount) throw new NotFoundError("User Not Found.");
 
   res.status(StatusCodes.OK).json({ msg: "The user has been deleted permanently." });
 };

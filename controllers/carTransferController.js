@@ -236,8 +236,17 @@ export const getCarsTransferByLocation = async (req, res) => {
     throw new NotFoundError("No car was found that has been transferred.");
 
   const carTransferred = allCarTransferred[0].data.map((item) => {
-    const { _id, userId, createdAt, licensePlate, carType, transferType, finalPrice, suspect } =
-      item;
+    const {
+      _id,
+      userId,
+      createdAt,
+      licensePlate,
+      carType,
+      transferMethod,
+      transferType,
+      finalPrice,
+      suspect,
+    } = item;
 
     const { firstName, lastName } = userId;
 
