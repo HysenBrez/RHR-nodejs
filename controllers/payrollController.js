@@ -4,6 +4,7 @@ import { StatusCodes } from "http-status-codes";
 import Payroll from "../models/Payroll.js";
 import User from "../models/User.js";
 import { BadRequestError, NotFoundError } from "../errors/index.js";
+import { addDays } from "../utils/helpers.js";
 
 export const checkUsersForPayroll = async (req, res) => {
   const { date, role } = req.query;
