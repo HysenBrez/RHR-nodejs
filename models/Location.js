@@ -67,6 +67,7 @@ const Location = new mongoose.Schema(
     },
     deletedAt: {
       type: Date,
+      default: "",
     },
   },
   {
