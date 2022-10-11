@@ -19,6 +19,7 @@ import carWash from "./routes/carWashRoutes.js";
 import carTransfer from "./routes/carTransferRoutes.js";
 import payroll from "./routes/payrollRoutes.js";
 import todayPlanRoutes from "./routes/todayPlanRoutes.js";
+import dashboardRoutes from "./routes/dashboardRoutes.js";
 
 // middleware
 import authMiddleware from "./middleware/authMiddleware.js";
@@ -39,6 +40,7 @@ app.use("/api/v1/car-wash", authMiddleware, carWash);
 app.use("/api/v1/car-transfer", authMiddleware, carTransfer);
 app.use("/api/v1/payroll", authMiddleware, payroll);
 app.use("/api/v1/today-plan", authMiddleware, todayPlanRoutes);
+app.use("/api/v1/dashboard", authMiddleware, dashboardRoutes);
 
 app.use(notFoundMiddleware);
 app.use(errorHandlerMiddleware);

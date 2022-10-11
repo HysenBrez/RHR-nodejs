@@ -55,6 +55,8 @@ export const getAllLocations = async (req, res) => {
 
   if (locationType) queryObject.locationType = locationType;
 
+  console.log(queryObject);
+
   const locations = await Location.aggregate([
     {
       $lookup: {
@@ -80,13 +82,16 @@ export const getAllLocations = async (req, res) => {
 export const getAllNameLocationsByAdmin = async (req, res) => {
   // adminPermissions(req.user);
 
-  let result = Location.find({ deletedAt: "" }, "locationName locationType");
+  let result = Location.find(
+    { $or: [{ $deletedAt: { $exists: true } }, { $deletedAt: { $eq: "" } }] },
+    "locationName locationType"
+  );
 
   result = result.sort({ locationName: 1 });
 
   const locations = await result;
 
-  if (!locations) throw new NotFoundError("Not found locations");
+  if (!locations) throw new NotFoundError("Locations not found.");
 
   const totalLocations = locations.length;
 
