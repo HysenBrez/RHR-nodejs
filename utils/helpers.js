@@ -52,3 +52,7 @@ export const equalDays = (day1, day2 = false) => {
     ? true
     : false;
 };
+
+// export const returnZero = (value) => {
+//   return value || 0;
+// };

@@ -41,17 +41,11 @@ export const getAllLocations = async (req, res) => {
 
   let queryObject = {
     $expr: {
-      $or: [
-        { $eq: [{ $type: "$deletedAt" }, "missing"] },
-        { $eq: ["$deletedAt", ""] },
-        { $eq: ["$deletedAt", null] },
-      ],
+      $or: [{ $eq: [{ $type: "$deletedAt" }, "missing"] }, { $eq: ["$deletedAt", null] }],
     },
   };
 
-  if (deleted == "true") {
-    queryObject = { deletedAt: { $exists: true, $ne: "" } };
-  }
+  if (deleted == "true") queryObject = { deletedAt: { $ne: null } };
 
   if (locationType) queryObject.locationType = locationType;
 
@@ -82,10 +76,7 @@ export const getAllLocations = async (req, res) => {
 export const getAllNameLocationsByAdmin = async (req, res) => {
   // adminPermissions(req.user);
 
-  let result = Location.find(
-    { $or: [{ $deletedAt: { $exists: true } }, { $deletedAt: { $eq: "" } }] },
-    "locationName locationType"
-  );
+  let result = Location.find({ deletedAt: null }, "locationName locationType");
 
   result = result.sort({ locationName: 1 });
 
