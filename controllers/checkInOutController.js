@@ -281,7 +281,7 @@ export const getCheckInsByUser = async (req, res) => {
     user: total ? user : undefined,
     checkIns: !total ? checkIns : undefined,
     totalHours: totalMins ? toHoursAndMins(totalMins) : 0,
-    totalSalary: totalSalary.toFixed(2) || 0,
+    totalSalary: totalSalary ? totalSalary.toFixed(2) : 0,
     totalCheckIns: totalCheckIns ? totalCheckIns : 0,
     numOfPages: numOfPages ? numOfPages : 0,
   });
@@ -483,7 +483,7 @@ export const getCheckIns = async (req, res) => {
   res.status(StatusCodes.OK).json({
     checkIns,
     totalHours: totalMins ? toHoursAndMins(totalMins, true) : 0,
-    totalSalary: totalSalary.toFixed(2) || 0,
+    totalSalary: totalSalary ? totalSalary.toFixed(2) : 0,
     totalCheckIns: totalCheckIns ? totalCheckIns : 0,
     numOfPages: numOfPages ? numOfPages : 0,
   });
@@ -613,6 +613,6 @@ export const getExcelFile = async (req, res) => {
     data,
     totalData,
     totalHours: toHoursAndMins(totalMins, true),
-    totalSalary: totalSalary.toFixed(2),
+    totalSalary: totalSalary ? totalSalary.toFixed(2) : 0,
   });
 };
