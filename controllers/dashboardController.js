@@ -85,32 +85,34 @@ export const carWashStats = async (req, res) => {
   const klotenArray = [];
   const zürichArray = [];
 
-  const dates = carWash.map((item) => {
-    const {
-      _id: { year, month, day },
-      data,
-    } = item;
+  const dates = carWash
+    .map((item) => {
+      const {
+        _id: { year, month, day },
+        data,
+      } = item;
 
-    const date = moment({ year, month, day }).format("DD/MM/YYYY");
+      const date = moment({ year, month, day }).format("DD/MM/YYYY");
 
-    let Dietlikon = 0;
-    let Kloten = 0;
-    let Zürich = 0;
+      let Dietlikon = 0;
+      let Kloten = 0;
+      let Zürich = 0;
 
-    data.forEach((value) => {
-      const { location } = value;
+      data.forEach((value) => {
+        const { location } = value;
 
-      if (location == "Dietlikon") Dietlikon += 1;
-      if (location == "Kloten") Kloten += 1;
-      if (location == "Zürich") Zürich += 1;
-    });
+        if (location == "Dietlikon") Dietlikon += 1;
+        if (location == "Kloten") Kloten += 1;
+        if (location == "Zürich") Zürich += 1;
+      });
 
-    dietlikonArray.push(Dietlikon);
-    klotenArray.push(Kloten);
-    zürichArray.push(Zürich);
+      dietlikonArray.push(Dietlikon);
+      klotenArray.push(Kloten);
+      zürichArray.push(Zürich);
 
-    return date;
-  });
+      return date;
+    })
+    .reverse();
 
   res.status(StatusCodes.OK).json({
     title: "Car Wash",
@@ -120,19 +122,19 @@ export const carWashStats = async (req, res) => {
         name: "Dietlikon",
         type: "line",
         fill: "solid",
-        data: dietlikonArray,
+        data: dietlikonArray.reverse(),
       },
       {
         name: "Kloten",
         type: "line",
         fill: "solid",
-        data: klotenArray,
+        data: klotenArray.reverse(),
       },
       {
         name: "Zurich",
         type: "line",
         fill: "solid",
-        data: zürichArray,
+        data: zürichArray.reverse(),
       },
     ],
   });
@@ -152,13 +154,17 @@ export const carTransferStats = async (req, res) => {
     { $sort: { _id: 1 } },
   ]);
 
+  const transferTypes = {
+    apdt: "AP-DT",
+    hzp: "HZP",
+    hbp: "HBP",
+    presumptive: "Transfer KM",
+  };
+
   carTransfer = carTransfer.map((item) => {
     const { _id: label, count: value } = item;
+    return { label: transferTypes[label], value };
+  });
 
-    return { label, value };
-  });
-  res.status(StatusCodes.OK).json({
-    title: "Car Transfer",
-    carTransfer,
-  });
+  res.status(StatusCodes.OK).json({ title: "Car Transfer", carTransfer });
 };

@@ -9,9 +9,12 @@ import {
   getCarsWashByUser,
   deleteCarWash,
   updateCarWashSuspect,
+  getExcel,
 } from "../controllers/carWashController.js";
 
 router.route("/admin/:id").get(getCarsWashByLocation);
+
+router.route("/get-excel").get(getExcel);
 
 router.route("/").post(carWash);
 router.route("/user/:id").get(getCarsWashByUser);

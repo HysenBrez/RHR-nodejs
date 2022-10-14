@@ -12,10 +12,7 @@ import {
   restoreUser,
   deleteUserPermanently,
   sendEmail,
-  getExcelFile,
 } from "../controllers/userController.js";
-
-router.route("/get-excel").get(getExcelFile);
 
 router.route("/").post(createUser).get(getAllUsers);
 router.route("/:id").get(getUser).patch(updateUser).delete(deleteUser);

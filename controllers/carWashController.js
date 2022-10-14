@@ -3,7 +3,7 @@ import { StatusCodes } from "http-status-codes";
 
 import CarWash from "../models/CarWash.js";
 import { BadRequestError, NotFoundError, UnAuthenticatedError } from "../errors/index.js";
-import { adminAndManagerPermissions } from "../utils/checkPermissions.js";
+import { adminAndManagerPermissions, adminPermissions } from "../utils/checkPermissions.js";
 import Location from "../models/Location.js";
 import moment from "moment";
 import { addDays } from "../utils/helpers.js";
@@ -166,19 +166,9 @@ export const getCarsWashByLocation = async (req, res) => {
 
   if (userId) queryObject.userId = mongoose.Types.ObjectId(userId);
 
-  if (from)
-    queryObject.createdAt = {
-      $gte: new Date(from),
-    };
-  if (to)
-    queryObject.createdAt = {
-      $lte: addDays(to),
-    };
-  if (from && to)
-    queryObject.createdAt = {
-      $gte: new Date(from),
-      $lt: addDays(to),
-    };
+  if (from) queryObject.createdAt = { $gte: new Date(from) };
+  if (to) queryObject.createdAt = { $lte: addDays(to) };
+  if (from && to) queryObject.createdAt = { $gte: new Date(from), $lt: addDays(to) };
 
   const page = Number(req.query.page) || 1;
   const limit = 10;
@@ -351,4 +341,94 @@ export const deleteCarWash = async (req, res) => {
   await CarWash.deleteOne({ _id: id });
 
   res.status(StatusCodes.OK).json({ msg: "Car wash successfully removed" });
+};
+
+export const getExcel = async (req, res) => {
+  adminPermissions(req.user);
+
+  const { search, from, to, locationId, userId } = req.query;
+
+  const queryObject = {};
+
+  if (search) queryObject.licensePlate = { $regex: search, $options: "i" };
+
+  if (from) queryObject.createdAt = { $gte: new Date(from) };
+
+  if (to) queryObject.createdAt = { $lte: addDays(to) };
+
+  if (from && to) queryObject.createdAt = { $gte: new Date(from), $lt: addDays(to) };
+
+  if (locationId) queryObject.locationId = locationId;
+
+  if (userId) queryObject.userId = userId;
+
+  let allCarWashed = await CarWash.aggregate([
+    { $match: { ...queryObject } },
+    {
+      $lookup: {
+        from: "users",
+        localField: "userId",
+        foreignField: "_id",
+        as: "userId",
+      },
+    },
+    { $unwind: "$userId" },
+    {
+      $facet: {
+        metadata: [
+          {
+            $group: {
+              _id: null,
+              totalCarWashed: { $sum: 1 },
+              totalPrice: { $sum: "$finalPrice" },
+            },
+          },
+          { $project: { _id: 0, totalCarWashed: 1, totalPrice: 1 } },
+        ],
+        data: [{ $sort: { createdAt: -1 } }],
+      },
+    },
+  ]);
+
+  const { totalCarWashed, totalPrice } = allCarWashed[0].metadata[0] || 0;
+
+  if (!allCarWashed.length) throw new NotFoundError("No results found.");
+
+  const carWashed = allCarWashed[0].data.map((item) => {
+    const { userId, createdAt, licensePlate, carType, washType, finalPrice } = item;
+
+    const { firstName, lastName } = userId;
+
+    const washTypesNames = {
+      outside: "Aussenreinigung",
+      inside: "Innenreinigung",
+      outInside: "Kombipaket",
+      motorrad: "Motorrad wäsche",
+      turnaround: "Turnaround",
+      quickTurnaround: "Quick Turnaround",
+      special: "Spezial",
+    };
+
+    return {
+      user: `${firstName} ${lastName}`,
+      date: moment(createdAt).format("DD MMMM, hh:mm"),
+      licensePlate,
+      carType,
+      washType: washTypesNames[washType],
+      finalPrice,
+    };
+  });
+
+  // const transferTypesNames = {
+  //   hzp: "HZP",
+  //   hbp: "HBP",
+  //   apdt: "AP-DT",
+  //   presumptive: "Transfer KM",
+  // };
+
+  res.status(StatusCodes.OK).json({
+    carWashed,
+    totalCarWashed: totalCarWashed || 0,
+    totalPrice,
+  });
 };

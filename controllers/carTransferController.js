@@ -4,7 +4,7 @@ import { StatusCodes } from "http-status-codes";
 import CarTransfer from "../models/CarTransfer.js";
 import Location from "../models/Location.js";
 import { BadRequestError, NotFoundError } from "../errors/index.js";
-import { adminAndManagerPermissions } from "../utils/checkPermissions.js";
+import { adminAndManagerPermissions, adminPermissions } from "../utils/checkPermissions.js";
 import { addDays } from "../utils/helpers.js";
 import mongoose from "mongoose";
 
@@ -374,4 +374,86 @@ export const deleteCarTransfer = async (req, res) => {
   await CarTransfer.deleteOne({ _id: id });
 
   res.status(StatusCodes.OK).json({ msg: "Car wash successfully removed" });
+};
+
+export const getExcel = async (req, res) => {
+  adminPermissions(req.user);
+
+  const { search, from, to, locationId, userId } = req.query;
+
+  const queryObject = {};
+
+  if (search) queryObject.licensePlate = { $regex: search, $options: "i" };
+
+  if (from) queryObject.createdAt = { $gte: new Date(from) };
+
+  if (to) queryObject.createdAt = { $lte: addDays(to) };
+
+  if (from && to) queryObject.createdAt = { $gte: new Date(from), $lt: addDays(to) };
+
+  if (locationId) queryObject.locationId = locationId;
+
+  if (userId) queryObject.userId = userId;
+
+  let allCarTransferred = await CarTransfer.aggregate([
+    { $match: { ...queryObject } },
+    {
+      $lookup: {
+        from: "users",
+        localField: "userId",
+        foreignField: "_id",
+        as: "userId",
+      },
+    },
+    { $unwind: "$userId" },
+    {
+      $facet: {
+        metadata: [
+          {
+            $group: {
+              _id: null,
+              totalCarTransferred: { $sum: 1 },
+              totalPrice: { $sum: "$finalPrice" },
+            },
+          },
+          { $project: { _id: 0, totalCarTransferred: 1, totalPrice: 1 } },
+        ],
+        data: [{ $sort: { createdAt: -1 } }],
+      },
+    },
+  ]);
+
+  const { totalCarTransferred, totalPrice } = allCarTransferred[0].metadata[0] || 0;
+
+  if (!allCarTransferred.length) throw new NotFoundError("No results found.");
+
+  const carTransferred = allCarTransferred[0].data.map((item) => {
+    const { userId, createdAt, licensePlate, carType, transferMethod, transferType, finalPrice } =
+      item;
+
+    const { firstName, lastName } = userId;
+
+    const transferTypesNames = {
+      hzp: "HZP",
+      hbp: "HBP",
+      apdt: "AP-DT",
+      presumptive: "Transfer KM",
+    };
+
+    return {
+      user: `${firstName} ${lastName}`,
+      date: moment(createdAt).format("DD MMMM, hh:mm"),
+      licensePlate,
+      carType,
+      transferMethod,
+      transferType: transferTypesNames[transferType],
+      finalPrice,
+    };
+  });
+
+  res.status(StatusCodes.OK).json({
+    carTransferred,
+    totalCarTransferred: totalCarTransferred || 0,
+    totalPrice,
+  });
 };
