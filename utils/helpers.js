@@ -21,9 +21,9 @@ export const toHoursAndMins = (minutes, format = false) => {
   return { hours, mins };
 };
 
-export const calcDailySalary = (minutes, salaryForHours) => {
+export const calcDailySalary = (minutes, hourlyPay) => {
   const { hours, mins } = toHoursAndMins(minutes);
-  return (hours * salaryForHours + (mins * salaryForHours) / 60).toFixed(2);
+  return (hours * hourlyPay + (mins * hourlyPay) / 60).toFixed(2);
 };
 
 export const format24h = (time) => {

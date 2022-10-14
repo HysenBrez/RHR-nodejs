@@ -108,7 +108,7 @@ export const checkIn = async (req, res) => {
     workHoursInMins: 0,
   });
 
-  res.status(201).json(checkIn);
+  res.status(201).json({ checkIn, msg: "Check-in has been created successfully." });
 };
 
 export const startBreak = async (req, res) => {
@@ -281,7 +281,7 @@ export const getCheckInsByUser = async (req, res) => {
     user: total ? user : undefined,
     checkIns: !total ? checkIns : undefined,
     totalHours: totalMins ? toHoursAndMins(totalMins) : 0,
-    totalSalary: totalSalary || 0,
+    totalSalary: totalSalary.toFixed(2) || 0,
     totalCheckIns: totalCheckIns ? totalCheckIns : 0,
     numOfPages: numOfPages ? numOfPages : 0,
   });
@@ -362,6 +362,10 @@ export const checkInByAdmin = async (req, res) => {
 
   const minutes = diffInMins(endTime, startTime);
 
+  const hourlyPay = (await User.findOne({ _id: userId })).hourlyPay;
+
+  console.log(hourlyPay);
+
   const checkIn = await CheckInOut.create({
     userId,
     startTime,
@@ -369,13 +373,13 @@ export const checkInByAdmin = async (req, res) => {
     active: false,
     attempt: 1,
     workHoursInMins: minutes,
-    dailySalary: calcDailySalary(minutes, req.user.hourlyPay || 0),
+    dailySalary: calcDailySalary(minutes, hourlyPay || 0),
     suspect: checkSuspect(endTime),
     description,
     createdBy: req.user.userId,
   });
 
-  res.status(201).json(checkIn);
+  res.status(statusCode.OK).json({ checkIn, msg: "Check-in has been created successfully." });
 };
 
 export const getCheckIns = async (req, res) => {
@@ -479,7 +483,7 @@ export const getCheckIns = async (req, res) => {
   res.status(StatusCodes.OK).json({
     checkIns,
     totalHours: totalMins ? toHoursAndMins(totalMins, true) : 0,
-    totalSalary: totalSalary || 0,
+    totalSalary: totalSalary.toFixed(2) || 0,
     totalCheckIns: totalCheckIns ? totalCheckIns : 0,
     numOfPages: numOfPages ? numOfPages : 0,
   });
