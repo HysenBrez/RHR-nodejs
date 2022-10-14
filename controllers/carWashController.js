@@ -358,9 +358,9 @@ export const getExcel = async (req, res) => {
 
   if (from && to) queryObject.createdAt = { $gte: new Date(from), $lt: addDays(to) };
 
-  if (locationId) queryObject.locationId = locationId;
+  if (locationId) queryObject.locationId = mongoose.Types.ObjectId(locationId);
 
-  if (userId) queryObject.userId = userId;
+  if (userId) queryObject.userId = mongoose.Types.ObjectId(userId);
 
   let allCarWashed = await CarWash.aggregate([
     { $match: { ...queryObject } },
@@ -394,7 +394,7 @@ export const getExcel = async (req, res) => {
 
   if (!allCarWashed.length) throw new NotFoundError("No results found.");
 
-  const carWashed = allCarWashed[0].data.map((item) => {
+  const data = allCarWashed[0].data.map((item) => {
     const { userId, createdAt, licensePlate, carType, washType, finalPrice } = item;
 
     const { firstName, lastName } = userId;
@@ -419,16 +419,9 @@ export const getExcel = async (req, res) => {
     };
   });
 
-  // const transferTypesNames = {
-  //   hzp: "HZP",
-  //   hbp: "HBP",
-  //   apdt: "AP-DT",
-  //   presumptive: "Transfer KM",
-  // };
-
   res.status(StatusCodes.OK).json({
-    carWashed,
+    data,
     totalCarWashed: totalCarWashed || 0,
-    totalPrice,
+    totalPrice: totalPrice || 0,
   });
 };

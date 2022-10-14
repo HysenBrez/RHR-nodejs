@@ -391,9 +391,9 @@ export const getExcel = async (req, res) => {
 
   if (from && to) queryObject.createdAt = { $gte: new Date(from), $lt: addDays(to) };
 
-  if (locationId) queryObject.locationId = locationId;
+  if (locationId) queryObject.locationId = mongoose.Types.ObjectId(locationId);
 
-  if (userId) queryObject.userId = userId;
+  if (userId) queryObject.userId = mongoose.Types.ObjectId(userId);
 
   let allCarTransferred = await CarTransfer.aggregate([
     { $match: { ...queryObject } },
@@ -427,17 +427,22 @@ export const getExcel = async (req, res) => {
 
   if (!allCarTransferred.length) throw new NotFoundError("No results found.");
 
-  const carTransferred = allCarTransferred[0].data.map((item) => {
+  const data = allCarTransferred[0].data.map((item) => {
     const { userId, createdAt, licensePlate, carType, transferMethod, transferType, finalPrice } =
       item;
 
     const { firstName, lastName } = userId;
 
-    const transferTypesNames = {
+    const transferTypes = {
       hzp: "HZP",
       hbp: "HBP",
       apdt: "AP-DT",
       presumptive: "Transfer KM",
+    };
+
+    const transferMethods = {
+      collection: "Collection",
+      delivery: "Delivery",
     };
 
     return {
@@ -445,15 +450,15 @@ export const getExcel = async (req, res) => {
       date: moment(createdAt).format("DD MMMM, hh:mm"),
       licensePlate,
       carType,
-      transferMethod,
-      transferType: transferTypesNames[transferType],
+      transferMethod: transferMethods[transferMethod],
+      transferType: transferTypes[transferType],
       finalPrice,
     };
   });
 
   res.status(StatusCodes.OK).json({
-    carTransferred,
+    data,
     totalCarTransferred: totalCarTransferred || 0,
-    totalPrice,
+    totalPrice: totalPrice || 0,
   });
 };
