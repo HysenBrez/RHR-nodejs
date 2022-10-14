@@ -379,7 +379,7 @@ export const checkInByAdmin = async (req, res) => {
     createdBy: req.user.userId,
   });
 
-  res.status(statusCode.OK).json({ checkIn, msg: "Check-in has been created successfully." });
+  res.status(StatusCodes.OK).json({ checkIn, msg: "Check-in has been created successfully." });
 };
 
 export const getCheckIns = async (req, res) => {
