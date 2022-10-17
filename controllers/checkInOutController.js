@@ -263,6 +263,11 @@ export const getCheckInsByUser = async (req, res) => {
       workHours: toHoursAndMins(workHoursInMins, true),
       dailySalary,
       suspect: equalDays(startTime) ? false : suspect,
+      l1: moment(startTime).local().format(),
+      l2: moment(startTime).local(true).format(),
+      l3: startTime,
+      p1: moment.parseZone(startTime).local().format(),
+      p2: moment.parseZone(startTime).local(true).format(),
     };
   });
 
