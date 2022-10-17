@@ -27,7 +27,7 @@ export const calcDailySalary = (minutes, hourlyPay) => {
 };
 
 export const format24h = (time) => {
-  return moment(time).local().format("HH:mm");
+  return moment(time).local(true).format("HH:mm");
 };
 
 export const addDays = (date, day = 1, format = false) => {
