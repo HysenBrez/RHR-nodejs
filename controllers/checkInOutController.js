@@ -263,6 +263,9 @@ export const getCheckInsByUser = async (req, res) => {
       workHours: toHoursAndMins(workHoursInMins, true),
       dailySalary,
       suspect: equalDays(startTime) ? false : suspect,
+      t1: moment.parseZone(startTime).format(),
+      t2: moment.parseZone(startTime).local().format(),
+      t3: moment.parseZone(startTime).utc().format(),
     };
   });
 
