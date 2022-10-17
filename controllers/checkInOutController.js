@@ -269,18 +269,21 @@ export const getCheckInsByUser = async (req, res) => {
   const numOfPages = Math.ceil(totalCheckIns / limit);
 
   let user;
+  let totalHours = totalMins ? toHoursAndMins(totalMins, true) : 0;
 
   if (total == "true") {
     user = await User.findOne(
       { _id: userId },
       { firstName: 1, lastName: 1, email: 1, street: 1, postalCode: 1, ahv: 1, hourlyPay: 1 }
     );
+
+    totalHours = totalMins ? toHoursAndMins(totalMins) : 0;
   }
 
   res.status(StatusCodes.OK).json({
     user: total ? user : undefined,
     checkIns: !total ? checkIns : undefined,
-    totalHours: totalMins ? toHoursAndMins(totalMins) : 0,
+    totalHours,
     totalSalary: totalSalary ? totalSalary.toFixed(2) : 0,
     totalCheckIns: totalCheckIns ? totalCheckIns : 0,
     numOfPages: numOfPages ? numOfPages : 0,
@@ -364,8 +367,6 @@ export const checkInByAdmin = async (req, res) => {
 
   const hourlyPay = (await User.findOne({ _id: userId })).hourlyPay;
 
-  console.log(hourlyPay);
-
   const checkIn = await CheckInOut.create({
     userId,
     startTime,
@@ -400,30 +401,18 @@ export const getCheckIns = async (req, res) => {
     queryObject.userId = { $in: usersIds };
   }
 
-  if (from)
-    queryObject.startTime = {
-      $gte: new Date(from),
-    };
+  if (from) queryObject.startTime = { $gte: new Date(from) };
 
-  if (to)
-    queryObject.startTime = {
-      $lte: addDays(to),
-    };
+  if (to) queryObject.startTime = { $lte: addDays(to) };
 
-  if (from && to)
-    queryObject.startTime = {
-      $gte: new Date(from),
-      $lte: addDays(to),
-    };
+  if (from && to) queryObject.startTime = { $gte: new Date(from), $lte: addDays(to) };
 
   const page = Number(req.query.page) || 1;
   const limit = 10;
   const skip = (page - 1) * limit;
 
   const allCheckIns = await CheckInOut.aggregate([
-    {
-      $match: { ...queryObject },
-    },
+    { $match: { ...queryObject } },
     {
       $lookup: {
         from: "users",
@@ -504,13 +493,15 @@ export const updateCheckInAdmin = async (req, res) => {
 
   breaks.map((b) => (minutes -= diffInMins(b.endBreak, b.startBreak)));
 
+  const hourlyPay = (await User.findOne({ _id: userId })).hourlyPay;
+
   checkIn.startTime = startTime;
   checkIn.endTime = endTime;
   checkIn.breaks = breaks;
   checkIn.description = description;
   checkIn.active = false;
   checkIn.workHoursInMins = minutes;
-  checkIn.dailySalary = calcDailySalary(minutes, req.user.hourlyPay || 0);
+  checkIn.dailySalary = calcDailySalary(minutes, hourlyPay || 0);
   checkIn.suspect = checkSuspect(endTime);
 
   await checkIn.save();
@@ -543,23 +534,13 @@ export const getExcelFile = async (req, res) => {
 
   if (userId) queryObject.userId = userId;
 
-  // if (locationId) queryObject.locationId = locationId;
+  if (locationId) queryObject.locationId = locationId;
 
-  if (from)
-    queryObject.startTime = {
-      $gte: new Date(from),
-    };
+  if (from) queryObject.startTime = { $gte: new Date(from) };
 
-  if (to)
-    queryObject.startTime = {
-      $lte: addDays(to),
-    };
+  if (to) queryObject.startTime = { $lte: addDays(to) };
 
-  if (from && to)
-    queryObject.startTime = {
-      $gte: new Date(from),
-      $lt: addDays(to),
-    };
+  if (from && to) queryObject.startTime = { $gte: new Date(from), $lt: addDays(to) };
 
   let result, totalData;
 
