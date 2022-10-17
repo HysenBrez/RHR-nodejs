@@ -263,11 +263,6 @@ export const getCheckInsByUser = async (req, res) => {
       workHours: toHoursAndMins(workHoursInMins, true),
       dailySalary,
       suspect: equalDays(startTime) ? false : suspect,
-      l1: moment(startTime).local().format(),
-      l2: moment(startTime).local(true).format(),
-      l3: startTime,
-      p1: moment.parseZone(startTime).local().format(),
-      p2: moment.parseZone(startTime).local(true).format(),
     };
   });
 
@@ -289,7 +284,7 @@ export const getCheckInsByUser = async (req, res) => {
     user: total ? user : undefined,
     checkIns: !total ? checkIns : undefined,
     totalHours,
-    totalSalary: totalSalary ? totalSalary.toFixed(2) : 0,
+    totalSalary: totalSalary ? totalSalary : 0,
     totalCheckIns: totalCheckIns ? totalCheckIns : 0,
     numOfPages: numOfPages ? numOfPages : 0,
   });
@@ -477,7 +472,7 @@ export const getCheckIns = async (req, res) => {
   res.status(StatusCodes.OK).json({
     checkIns,
     totalHours: totalMins ? toHoursAndMins(totalMins, true) : 0,
-    totalSalary: totalSalary ? totalSalary.toFixed(2) : 0,
+    totalSalary: totalSalary ? totalSalary : 0,
     totalCheckIns: totalCheckIns ? totalCheckIns : 0,
     numOfPages: numOfPages ? numOfPages : 0,
   });

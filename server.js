@@ -2,10 +2,12 @@ import express from "express";
 import fileUpload from "express-fileupload";
 import dotenv from "dotenv";
 import cors from "cors";
+import moment from "moment-timezone";
 import "express-async-errors";
 
 const app = express();
 dotenv.config();
+moment().tz("Europe/Berlin").format();
 
 // db and authenticate
 import connectDB from "./db/connect.js";
