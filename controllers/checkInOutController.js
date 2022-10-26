@@ -88,7 +88,7 @@ export const checkIn = async (req, res) => {
     },
     {
       $match: {
-        onlyDate: { $eq: moment().format("YYYY-MM-DD") },
+        onlyDate: { $eq: moment(startTime).format("YYYY-MM-DD") },
         userId: mongoose.Types.ObjectId(userId),
       },
     },
@@ -180,20 +180,20 @@ export const getCheckInsByUser = async (req, res) => {
 
   const { from, to, total, date } = req.query;
 
-  let date20 = moment().set({ D: 20 }).format("YYYY-MM-DD");
+  let date21 = moment().set({ D: 21 }).format("YYYY-MM-DD");
 
   if (date) {
     const month = Number(date.split("-")[1]);
-    date20 = moment()
-      .set({ M: month - 2, D: 20 })
+    date21 = moment()
+      .set({ M: month - 2, D: 21 })
       .format("YYYY-MM-DD");
   } else {
-    if (moment().format("D") < 20)
-      date20 = moment(date20).subtract(1, "months").format("YYYY-MM-DD");
+    if (moment().format("D") < 21)
+      date21 = moment(date21).subtract(1, "months").format("YYYY-MM-DD");
   }
 
   const queryObject = {
-    startTime: { $gte: new Date(date20), $lte: addMonths(date20) }, // 20-19
+    startTime: { $gte: new Date(date21), $lte: addMonths(date21) },
   };
 
   if (!userId) throw new BadRequestError("Please provide all values");
@@ -258,8 +258,8 @@ export const getCheckInsByUser = async (req, res) => {
       _id,
       user: `${firstName} ${lastName}`,
       date: moment(startTime).format("DD MMMM, YYYY"),
-      startTime: format24h(startTime),
-      endTime: !checkSuspect(endTime) ? format24h(endTime) : "-",
+      startTime: startTime,
+      endTime: !checkSuspect(endTime) ? endTime : "-",
       workHours: toHoursAndMins(workHoursInMins, true),
       dailySalary,
       suspect: equalDays(startTime) ? false : suspect,
@@ -357,18 +357,19 @@ export const checkInByAdmin = async (req, res) => {
     },
     {
       $match: {
-        onlyDate: { $eq: moment().format("YYYY-MM-DD") },
+        onlyDate: { $eq: moment(startTime).format("YYYY-MM-DD") },
         userId: mongoose.Types.ObjectId(userId),
       },
     },
   ]);
 
+  console.log(checkData);
   if (checkData.length)
     throw new BadRequestError("You can't create check-in twice for the same day.");
 
   const minutes = diffInMins(endTime, startTime);
 
-  const hourlyPay = (await User.findOne({ _id: userId })).hourlyPay;
+  const hourlyPay = (await User.findOne({ _id: userId }))?.hourlyPay;
 
   const checkIn = await CheckInOut.create({
     userId,
@@ -456,14 +457,14 @@ export const getCheckIns = async (req, res) => {
   const checkIns = allCheckIns[0].data.map((item) => {
     const { _id, userId, startTime, endTime, workHoursInMins, dailySalary, suspect } = item;
 
-    const { firstName, lastName } = userId[0];
+    const { firstName, lastName } = userId[0] || 0;
 
     return {
       _id,
-      user: `${firstName} ${lastName}`,
+      user: `${firstName || "User"} ${lastName || "Deleted"}`,
       date: moment(startTime).format("DD MMMM, YYYY"),
-      startTime: format24h(startTime),
-      endTime: !checkSuspect(endTime) ? format24h(endTime) : "-",
+      startTime: startTime,
+      endTime: !checkSuspect(endTime) ? endTime : "-",
       workHours: toHoursAndMins(workHoursInMins, true),
       dailySalary,
       suspect: equalDays(startTime) ? false : suspect,
@@ -496,7 +497,7 @@ export const updateCheckInAdmin = async (req, res) => {
 
   breaks.map((b) => (minutes -= diffInMins(b.endBreak, b.startBreak)));
 
-  const hourlyPay = (await User.findOne({ _id: userId })).hourlyPay;
+  const hourlyPay = (await User.findOne({ _id: checkIn.userId }))?.hourlyPay;
 
   checkIn.startTime = startTime;
   checkIn.endTime = endTime;
@@ -531,8 +532,11 @@ export const getExcelFile = async (req, res) => {
 
   const { userId, locationId, from, to } = req.query;
 
+  const today = moment({ h: 0, m: 0, s: 0 }).format();
+
   const queryObject = {
     suspect: false,
+    startTime: { $gte: new Date(today), $lte: addDays(today) },
   };
 
   if (userId) queryObject.userId = userId;

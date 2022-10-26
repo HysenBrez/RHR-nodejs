@@ -21,7 +21,7 @@ export const locationByAdmin = async (req, res) => {
     createdBy: req.user.userId,
   });
 
-  res.status(201).json(location);
+  res.status(201).json({ location, msg: "Location has been created successfully." });
 };
 
 export const getLocation = async (req, res) => {
@@ -105,7 +105,7 @@ export const updateLocationByAdmin = async (req, res) => {
 
   if (!location) throw new NotFoundError("Not found location");
 
-  res.status(200).json(location);
+  res.status(201).json({ location, msg: "Location has been updated successfully." });
 };
 
 export const deleteLocationByAdmin = async (req, res) => {

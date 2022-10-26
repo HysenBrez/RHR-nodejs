@@ -80,6 +80,10 @@ const UserSchema = new mongoose.Schema(
     active: {
       type: Boolean,
     },
+    resetToken: {
+      type: String,
+      default: null,
+    },
     deletedAt: {
       type: Date,
     },

@@ -152,7 +152,7 @@ export const getCarsTransferByUser = async (req, res) => {
     return {
       _id,
       user: `${firstName} ${lastName}`,
-      date: moment(createdAt).format("DD MMMM, hh:mm"),
+      date: createdAt,
       licensePlate,
       carType,
       transferMethod,
@@ -260,7 +260,7 @@ export const getCarsTransferByLocation = async (req, res) => {
     return {
       _id,
       user: `${firstName} ${lastName}`,
-      date: moment(createdAt).format("DD MMMM, hh:mm"),
+      date: createdAt,
       licensePlate,
       carType,
       transferMethod,
@@ -381,7 +381,11 @@ export const getExcel = async (req, res) => {
 
   const { search, from, to, locationId, userId } = req.query;
 
-  const queryObject = {};
+  const today = moment({ h: 0, m: 0, s: 0 }).format();
+
+  const queryObject = {
+    createdAt: { $gte: new Date(today), $lte: addDays(today) },
+  };
 
   if (search) queryObject.licensePlate = { $regex: search, $options: "i" };
 
@@ -447,7 +451,7 @@ export const getExcel = async (req, res) => {
 
     return {
       user: `${firstName} ${lastName}`,
-      date: moment(createdAt).format("DD MMMM, hh:mm"),
+      date: createdAt,
       licensePlate,
       carType,
       transferMethod: transferMethods[transferMethod],

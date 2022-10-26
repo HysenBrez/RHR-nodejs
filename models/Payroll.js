@@ -51,6 +51,9 @@ const Payroll = new mongoose.Schema(
     monthlyDeduction: {
       type: Number,
     },
+    monthlyPay: {
+      type: Number,
+    },
     taxes: {
       type: Object,
     },

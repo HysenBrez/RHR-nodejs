@@ -18,7 +18,7 @@ router.route("/").post(createUser).get(getAllUsers);
 router.route("/:id").get(getUser).patch(updateUser).delete(deleteUser);
 router.route("/:id/restore").patch(restoreUser);
 router.route("/:id/permanently").delete(deleteUserPermanently);
-router.route("/:id/change-password").patch(changePassword); // should check again
+router.route("/:id/change-password").patch(changePassword);
 
 router.route("/send-email").post(sendEmail);
 

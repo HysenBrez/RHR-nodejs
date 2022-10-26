@@ -6,10 +6,6 @@ import cron from "node-cron";
 import User from "../models/User.js";
 import { BadRequestError, NotFoundError } from "../errors/index.js";
 import { adminPermissions } from "../utils/checkPermissions.js";
-import CheckInOut from "../models/CheckInOut.js";
-import CarWash from "../models/CarWash.js";
-import CarTransfer from "../models/CarTransfer.js";
-import { addDays } from "../utils/helpers.js";
 
 export const createUser = async (req, res) => {
   const { firstName, lastName, email, password, role, locationId } = req.body;
@@ -57,17 +53,15 @@ export const getAllUsers = async (req, res) => {
 
   let queryObject = {
     active: true,
-    deletedAt: "",
+    deletedAt: null,
   };
-
-  // if (all) queryObject.active = { $in: [true, false] };
 
   if (search) {
     queryObject = {
+      ...queryObject,
       $or: [
         { firstName: { $regex: search, $options: "i" } },
         { lastName: { $regex: search, $options: "i" } },
-        { phone: { $regex: search, $options: "i" } },
       ],
     };
   }
@@ -81,11 +75,9 @@ export const getAllUsers = async (req, res) => {
     queryObject.active = { $in: [true, false] };
   }
 
-  let result = User.find(queryObject)
-    .collation({ locale: "en" })
-    .populate("locationId", ["_id", "locationName"]);
+  let result = User.find(queryObject).populate("locationId", ["_id", "locationName"]);
 
-  result = result.sort({ firstName: 1 });
+  result = result.sort({ updatedAt: -1 });
 
   const page = Number(req.query.page) || 1;
   const limit = Number(req.query.limit) || 10;
@@ -233,8 +225,7 @@ export const sendEmail = async (req, res) => {
       <head>
       </head>
       <body>
-        Pershendetje <b>${name}, </b> <br>
-        Te bashkangjitur gjeni Lohnabrechnung.
+        <p>Im Anhang finden sie ihre Lohnabrechnung.</p>
       </body>
     </html>`,
     attachments: [{ filename: `Lohnabrechnung - ${name}.pdf`, content }],

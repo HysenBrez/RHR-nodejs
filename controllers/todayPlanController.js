@@ -29,7 +29,7 @@ export const getTodayPlan = async (req, res) => {
     _id,
     users,
     createdBy: `${firstName} ${lastName}`,
-    lastModified: moment(updatedAt).format("DD MMMM, hh:mm"),
+    lastModified: updatedAt,
   };
 
   res.status(StatusCodes.OK).json({ todayPlan });

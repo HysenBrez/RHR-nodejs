@@ -38,6 +38,7 @@ export const createPayroll = async (req, res) => {
     grossSalary,
     hourlyDeduction,
     monthlyDeduction,
+    monthlyPay,
     taxes,
   } = req.body;
 
@@ -49,11 +50,12 @@ export const createPayroll = async (req, res) => {
     !placeDate ||
     !canton ||
     !totalHours ||
-    !hourlyPay ||
-    !hourlyPayGross ||
+    hourlyPay == undefined ||
+    hourlyPayGross == undefined ||
     !grossSalary ||
-    !hourlyDeduction ||
-    !monthlyDeduction ||
+    hourlyDeduction == undefined ||
+    monthlyDeduction == undefined ||
+    monthlyPay == undefined ||
     !taxes
   )
     throw new BadRequestError("Please provide all values.");
@@ -73,6 +75,7 @@ export const createPayroll = async (req, res) => {
     grossSalary,
     hourlyDeduction,
     monthlyDeduction,
+    monthlyPay,
     taxes,
     createdBy: req.user.userId,
   });
