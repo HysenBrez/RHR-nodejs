@@ -263,30 +263,24 @@ export const getCheckInsByUser = async (req, res) => {
       workHours: toHoursAndMins(workHoursInMins, true),
       dailySalary,
       suspect: equalDays(startTime) ? false : suspect,
-      t1: moment.parseZone(startTime).format(),
-      t2: moment.parseZone(startTime).local().format(),
-      t3: moment.parseZone(startTime).utc().format(),
     };
   });
 
   const numOfPages = Math.ceil(totalCheckIns / limit);
 
   let user;
-  let totalHours = totalMins ? toHoursAndMins(totalMins, true) : 0;
 
   if (total == "true") {
     user = await User.findOne(
       { _id: userId },
       { firstName: 1, lastName: 1, email: 1, street: 1, postalCode: 1, ahv: 1, hourlyPay: 1 }
     );
-
-    totalHours = totalMins ? toHoursAndMins(totalMins) : 0;
   }
 
   res.status(StatusCodes.OK).json({
     user: total ? user : undefined,
     checkIns: !total ? checkIns : undefined,
-    totalHours,
+    totalHours: totalMins ? toHoursAndMins(totalMins) : 0,
     totalSalary: totalSalary ? totalSalary : 0,
     totalCheckIns: totalCheckIns ? totalCheckIns : 0,
     numOfPages: numOfPages ? numOfPages : 0,
