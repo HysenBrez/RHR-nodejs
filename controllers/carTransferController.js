@@ -17,6 +17,7 @@ export const carTransfer = async (req, res) => {
     transferType,
     transferMethod,
     transferDistance,
+    transferPlace,
     acceptSuspect,
   } = req.body;
 
@@ -59,6 +60,7 @@ export const carTransfer = async (req, res) => {
     transferType,
     transferMethod,
     transferDistance,
+    transferPlace,
     finalPrice: price,
     suspect: carTransferCheck ? true : false,
     createdBy: req.user.userId,
@@ -157,6 +159,7 @@ export const getCarsTransferByUser = async (req, res) => {
       carType,
       transferMethod,
       transferType: transferTypesNames[transferType],
+      transferPlace,
       finalPrice,
       suspect,
     };
@@ -298,6 +301,7 @@ export const updateCarTransfer = async (req, res) => {
     transferType,
     transferMethod,
     transferDistance,
+    transferPlace,
     acceptSuspect,
   } = req.body;
 
@@ -338,6 +342,7 @@ export const updateCarTransfer = async (req, res) => {
   carTransfer.transferType = transferType;
   carTransfer.transferMethod = transferMethod;
   carTransfer.transferDistance = transferDistance;
+  carTransfer.transferPlace = transferPlace;
   carTransfer.finalPrice = price;
   carTransfer.suspect = carTransferCheck ? true : false;
 

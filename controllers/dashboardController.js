@@ -87,10 +87,12 @@ export const carWashStats = async (req, res) => {
 
   const dates = carWash
     .map((item) => {
-      const {
+      let {
         _id: { year, month, day },
         data,
       } = item;
+
+      month -= 1;
 
       const date = moment({ year, month, day }).format("DD/MM/YYYY");
 

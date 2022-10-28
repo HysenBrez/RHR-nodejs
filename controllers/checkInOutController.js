@@ -340,7 +340,7 @@ export const getCheckIn = async (req, res) => {
 export const checkInByAdmin = async (req, res) => {
   adminPermissions(req.user);
 
-  const { userId, startTime, endTime, description } = req.body;
+  const { userId, startTime, endTime, description, breaks } = req.body;
 
   if (!userId || !startTime || !endTime) throw new BadRequestError("Please provide all values");
 
@@ -363,11 +363,12 @@ export const checkInByAdmin = async (req, res) => {
     },
   ]);
 
-  console.log(checkData);
   if (checkData.length)
     throw new BadRequestError("You can't create check-in twice for the same day.");
 
-  const minutes = diffInMins(endTime, startTime);
+  let minutes = diffInMins(endTime, startTime);
+
+  if (breaks) breaks.map((b) => (minutes -= diffInMins(b.endBreak, b.startBreak)));
 
   const hourlyPay = (await User.findOne({ _id: userId }))?.hourlyPay;
 
@@ -375,6 +376,7 @@ export const checkInByAdmin = async (req, res) => {
     userId,
     startTime,
     endTime,
+    breaks,
     active: false,
     attempt: 1,
     workHoursInMins: minutes,

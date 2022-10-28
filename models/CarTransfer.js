@@ -42,6 +42,9 @@ const CarTransfer = new mongoose.Schema(
         "Please provide transfer distance",
       ],
     },
+    transferPlace: {
+      type: String,
+    },
     finalPrice: {
       type: Number,
     },
