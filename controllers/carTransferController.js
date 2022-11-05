@@ -334,13 +334,19 @@ export const updateCarTransfer = async (req, res) => {
 
   let price;
 
+  const locationPrice = await Location.findOne(
+    {
+      _id: locationId,
+      "carType.name": carType,
+    },
+    { "carType.transfer.$": 1 }
+  );
+
   if (transferType === "presumptive") {
-    price = specialPrice;
+    price =
+      Number(locationPrice.carType[0].transfer.base) +
+      Number(transferDistance) * Number(locationPrice.carType[0].transfer.perkm);
   } else {
-    const locationPrice = await Location.findOne(
-      { _id: locationId, "carType.name": carType },
-      { "carType.transfer.$": 1 }
-    );
     price = locationPrice.carType[0].transfer[transferType];
   }
 
