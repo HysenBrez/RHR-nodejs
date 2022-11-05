@@ -152,13 +152,18 @@ export const getCarsTransferByUser = async (req, res) => {
       presumptive: "Transfer KM",
     };
 
+    const transferMethods = {
+      collection: "Collection",
+      delivery: "Delivery",
+    };
+
     return {
       _id,
       user: `${firstName || "User"} ${lastName || "Deleted"}`,
       date: createdAt,
       licensePlate,
       carType,
-      transferMethod,
+      transferMethod: transferMethods[transferMethod],
       transferType: transferTypesNames[transferType],
       transferPlace,
       finalPrice: req.user.role === "admin" ? finalPrice : undefined,
