@@ -185,15 +185,15 @@ export const getCheckInsByUser = async (req, res) => {
   if (date) {
     const month = Number(date.split("-")[1]);
     date21 = moment()
-      .set({ M: month - 2, D: 21 })
+      .set({ M: month - 1, D: 21 })
       .format("YYYY-MM-DD");
-  } else {
-    if (moment().format("D") < 21)
-      date21 = moment(date21).subtract(1, "months").format("YYYY-MM-DD");
   }
 
   const queryObject = {
-    startTime: { $gte: new Date(date21), $lte: addMonths(date21) },
+    startTime: {
+      $gte: new Date(moment(date21).subtract(1, "months").format("YYYY-MM-DD")),
+      $lte: new Date(date21),
+    },
   };
 
   if (!userId) throw new BadRequestError("Please provide all values");
@@ -577,13 +577,9 @@ export const getExcelFile = async (req, res) => {
 
     return {
       user: `${firstName} ${lastName}`,
-      date: moment(startTime).format("DD-MM-YYYY"),
-      checkIn: startLoc
-        ? `${format24h(startTime)} (${startLoc?.address?.road}, ${startLoc?.address?.city})`
-        : format24h(startTime),
-      checkOut: endLoc
-        ? `${format24h(endTime)} (${endLoc?.address?.road}, ${endLoc?.address?.city})`
-        : format24h(endTime),
+      date: startTime,
+      checkIn: startTime,
+      checkOut: endTime,
       workHours: toHoursAndMins(workHoursInMins, true),
       dailySalary,
     };

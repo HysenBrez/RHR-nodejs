@@ -138,6 +138,7 @@ export const getCarsTransferByUser = async (req, res) => {
       carType,
       transferMethod,
       transferType,
+      transferPlace,
       finalPrice,
       suspect,
     } = item;
@@ -153,14 +154,14 @@ export const getCarsTransferByUser = async (req, res) => {
 
     return {
       _id,
-      user: `${firstName} ${lastName}`,
+      user: `${firstName || "User"} ${lastName || "Deleted"}`,
       date: createdAt,
       licensePlate,
       carType,
       transferMethod,
       transferType: transferTypesNames[transferType],
       transferPlace,
-      finalPrice,
+      finalPrice: req.user.role === "admin" ? finalPrice : undefined,
       suspect,
     };
   });
@@ -247,6 +248,7 @@ export const getCarsTransferByLocation = async (req, res) => {
       carType,
       transferMethod,
       transferType,
+      transferPlace,
       finalPrice,
       suspect,
     } = item;
@@ -268,7 +270,8 @@ export const getCarsTransferByLocation = async (req, res) => {
       carType,
       transferMethod,
       transferType: transferTypesNames[transferType],
-      finalPrice,
+      transferPlace,
+      finalPrice: req.user.role === "admin" ? finalPrice : undefined,
       suspect,
     };
   });
@@ -326,7 +329,7 @@ export const updateCarTransfer = async (req, res) => {
 
   let price;
 
-  if (transferType === "special") {
+  if (transferType === "presumptive") {
     price = specialPrice;
   } else {
     const locationPrice = await Location.findOne(
@@ -382,7 +385,7 @@ export const deleteCarTransfer = async (req, res) => {
 };
 
 export const getExcel = async (req, res) => {
-  adminPermissions(req.user);
+  adminAndManagerPermissions(req.user);
 
   const { search, from, to, locationId, userId } = req.query;
 
@@ -437,8 +440,16 @@ export const getExcel = async (req, res) => {
   if (!allCarTransferred.length) throw new NotFoundError("No results found.");
 
   const data = allCarTransferred[0].data.map((item) => {
-    const { userId, createdAt, licensePlate, carType, transferMethod, transferType, finalPrice } =
-      item;
+    const {
+      userId,
+      createdAt,
+      licensePlate,
+      carType,
+      transferMethod,
+      transferType,
+      transferPlace,
+      finalPrice,
+    } = item;
 
     const { firstName, lastName } = userId;
 
@@ -461,7 +472,8 @@ export const getExcel = async (req, res) => {
       carType,
       transferMethod: transferMethods[transferMethod],
       transferType: transferTypes[transferType],
-      finalPrice,
+      transferPlace,
+      finalPrice: req.user.role === "admin" ? finalPrice : undefined,
     };
   });
 

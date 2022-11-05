@@ -13,11 +13,15 @@ export const checkUsersForPayroll = async (req, res) => {
 
   const getUsersIds = await Payroll.distinct("userId", { monthYear: date });
 
-  const users = await User.find({
-    _id: { $nin: getUsersIds },
-    role: role ? { $in: role.split(",") } : "user",
-    active: true,
-  });
+  const users = await User.find(
+    {
+      _id: { $nin: getUsersIds },
+      role: role ? { $in: role.split(",") } : "user",
+      active: true,
+      deletedAt: null,
+    },
+    { active: 0, createdAt: 0, updatedAt: 0, __v: 0, resetToken: 0, description: 0 }
+  );
 
   res.status(StatusCodes.OK).json({ users });
 };

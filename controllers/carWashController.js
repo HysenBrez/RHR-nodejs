@@ -132,7 +132,7 @@ export const getCarsWashByUser = async (req, res) => {
       licensePlate,
       carType,
       washType: washTypesNames[washType],
-      finalPrice,
+      finalPrice: req.user.role === "admin" ? finalPrice : undefined,
       suspect,
     };
   });
@@ -238,7 +238,7 @@ export const getCarsWashByLocation = async (req, res) => {
       licensePlate,
       carType,
       washType: washTypesNames[washType],
-      finalPrice,
+      finalPrice: req.user.role === "admin" ? finalPrice : undefined,
       suspect,
     };
   });
@@ -344,7 +344,7 @@ export const deleteCarWash = async (req, res) => {
 };
 
 export const getExcel = async (req, res) => {
-  adminPermissions(req.user);
+  adminAndManagerPermissions(req.user);
 
   const { search, from, to, locationId, userId } = req.query;
 
@@ -419,7 +419,7 @@ export const getExcel = async (req, res) => {
       licensePlate,
       carType,
       washType: washTypesNames[washType],
-      finalPrice,
+      finalPrice: req.user.role === "admin" ? finalPrice : undefined,
     };
   });
 

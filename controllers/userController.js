@@ -214,6 +214,8 @@ export const deleteUserPermanently = async (req, res) => {
 export const sendEmail = async (req, res) => {
   const { name, email, pdfBase64 } = req.body;
 
+  if (!pdfBase64) throw new BadRequestError("Please provide pdf.");
+
   const content = Buffer.from(pdfBase64, "base64");
 
   let mailOptions = {
