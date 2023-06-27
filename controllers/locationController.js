@@ -21,7 +21,9 @@ export const locationByAdmin = async (req, res) => {
     createdBy: req.user.userId,
   });
 
-  res.status(201).json({ location, msg: "Location has been created successfully." });
+  res
+    .status(201)
+    .json({ location, msg: "Location has been created successfully." });
 };
 
 export const getLocation = async (req, res) => {
@@ -41,7 +43,10 @@ export const getAllLocations = async (req, res) => {
 
   let queryObject = {
     $expr: {
-      $or: [{ $eq: [{ $type: "$deletedAt" }, "missing"] }, { $eq: ["$deletedAt", null] }],
+      $or: [
+        { $eq: [{ $type: "$deletedAt" }, "missing"] },
+        { $eq: ["$deletedAt", null] },
+      ],
     },
   };
 
@@ -105,7 +110,9 @@ export const updateLocationByAdmin = async (req, res) => {
 
   if (!location) throw new NotFoundError("Not found location");
 
-  res.status(201).json({ location, msg: "Location has been updated successfully." });
+  res
+    .status(201)
+    .json({ location, msg: "Location has been updated successfully." });
 };
 
 export const deleteLocationByAdmin = async (req, res) => {
@@ -121,7 +128,9 @@ export const deleteLocationByAdmin = async (req, res) => {
 
   await location.save();
 
-  res.status(StatusCodes.OK).json({ msg: "Location successfully has been deleted." });
+  res
+    .status(StatusCodes.OK)
+    .json({ msg: "Location successfully has been deleted." });
 };
 
 export const restoreLocation = async (req, res) => {
@@ -145,9 +154,14 @@ export const deleteLocationPermanently = async (req, res) => {
 
   const { id } = req.params;
 
-  const location = await Location.deleteOne({ _id: id, deletedAt: { $ne: "" } });
+  const location = await Location.deleteOne({
+    _id: id,
+    deletedAt: { $ne: "" },
+  });
 
   if (!location.deletedCount) throw new NotFoundError("Location Not Found.");
 
-  res.status(StatusCodes.OK).json({ msg: "The location has been deleted permanently." });
+  res
+    .status(StatusCodes.OK)
+    .json({ msg: "The location has been deleted permanently." });
 };

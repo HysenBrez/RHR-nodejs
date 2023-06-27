@@ -8,9 +8,9 @@ import { BadRequestError, NotFoundError } from "../errors/index.js";
 import { adminPermissions } from "../utils/checkPermissions.js";
 
 export const createUser = async (req, res) => {
-  const { firstName, lastName, email, password, role, locationId } = req.body;
+  const { firstName, lastName, email, password, role } = req.body;
 
-  if (!firstName || !lastName || !email || !password || !locationId)
+  if (!firstName || !lastName || !email || !password)
     throw new BadRequestError("Please provide all values");
 
   const checkEmail = await User.findOne({ email });
@@ -22,7 +22,6 @@ export const createUser = async (req, res) => {
     email,
     password,
     role,
-    locationId,
     active: true,
   });
   const token = user.createJWT();
@@ -45,7 +44,9 @@ export const getUser = async (req, res) => {
 
   if (!user) throw new NotFoundError("Not found user.");
 
-  res.status(200).json({ ...user._doc, active: user.active ? "active" : "Inactive" });
+  res
+    .status(200)
+    .json({ ...user._doc, active: user.active ? "active" : "Inactive" });
 };
 
 export const getAllUsers = async (req, res) => {
@@ -75,7 +76,10 @@ export const getAllUsers = async (req, res) => {
     queryObject.active = { $in: [true, false] };
   }
 
-  let result = User.find(queryObject).populate("locationId", ["_id", "locationName"]);
+  let result = User.find(queryObject).populate("locationId", [
+    "_id",
+    "locationName",
+  ]);
 
   result = result.sort({ updatedAt: -1 });
 
@@ -134,7 +138,9 @@ export const updateUser = async (req, res) => {
 
   const token = user.createJWT();
 
-  res.status(StatusCodes.OK).json({ user, token, msg: "User has been updated." });
+  res
+    .status(StatusCodes.OK)
+    .json({ user, token, msg: "User has been updated." });
 };
 
 export const changePassword = async (req, res) => {
@@ -145,20 +151,25 @@ export const changePassword = async (req, res) => {
     throw new BadRequestError("Please provide all values");
 
   if (newPassword !== confirmPassword)
-    throw new BadRequestError("New password and confirm password must be the same.");
+    throw new BadRequestError(
+      "New password and confirm password must be the same."
+    );
 
   const user = await User.findOne({ _id: userId }).select("+password");
 
   if (req.user.role !== "admin") {
     const isPasswordCorrect = await user.comparePassword(currentPassword);
-    if (!isPasswordCorrect) throw new BadRequestError("Current password is incorrect");
+    if (!isPasswordCorrect)
+      throw new BadRequestError("Current password is incorrect");
   }
 
   user.password = newPassword;
 
   await user.save();
 
-  res.status(StatusCodes.OK).json({ userId, msg: "Password changed successfully", user });
+  res
+    .status(StatusCodes.OK)
+    .json({ userId, msg: "Password changed successfully", user });
 };
 
 export const deleteUser = async (req, res) => {
@@ -194,7 +205,9 @@ export const restoreUser = async (req, res) => {
 
   await user.save();
 
-  res.status(StatusCodes.OK).json({ msg: "The user has been restored successfully." });
+  res
+    .status(StatusCodes.OK)
+    .json({ msg: "The user has been restored successfully." });
 };
 
 export const deleteUserPermanently = async (req, res) => {
@@ -208,7 +221,9 @@ export const deleteUserPermanently = async (req, res) => {
 
   if (!user.deletedCount) throw new NotFoundError("User Not Found.");
 
-  res.status(StatusCodes.OK).json({ msg: "The user has been deleted permanently." });
+  res
+    .status(StatusCodes.OK)
+    .json({ msg: "The user has been deleted permanently." });
 };
 
 export const sendEmail = async (req, res) => {

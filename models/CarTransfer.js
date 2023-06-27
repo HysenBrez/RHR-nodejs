@@ -46,7 +46,7 @@ const CarTransfer = new mongoose.Schema(
       type: String,
     },
     finalPrice: {
-      type: Number,
+      type: String,
     },
     suspect: {
       type: Boolean,
